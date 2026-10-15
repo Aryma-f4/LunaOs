@@ -30,6 +30,8 @@ shell_command_exit db "exit"
 shell_command_exit_end:
 shell_command_cd db "cd"
 shell_command_cd_end:
+shell_command_echo db "echo"
+shell_command_echo_end:
 
 shell_command_unknown db STATIC_SEQUENCE_COLOR_GREEN_LIGHT, "?", STATIC_SCANCODE_NEW_LINE
 shell_command_unknown_end:
