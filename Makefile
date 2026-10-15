@@ -1,7 +1,7 @@
 # LunaOs build. Stage order is load order: the kernel incbin's the library,
 # stage 2 incbin's the kernel, and the boot sector incbin's stage 2.
-WIDTH  = 1280
-HEIGHT = 720
+WIDTH  = 1920
+HEIGHT = 1080
 
 APPS = free init wello cat console hello ls lulu glaze redia shell calculator tetris tm
 
@@ -43,7 +43,9 @@ build/kernel: kernel.asm $(KERNEL_VFS_DEPS) | build
 KERNEL_SIZE = $(shell wc -c < build/kernel)
 
 # Stage 2: graphics, protected mode, long mode, IDT, disk load.
-build/luna_stage2: luna/luna.asm build/kernel | build
+# WIDTH/HEIGHT feed the stage 2 preprocessor defines, so the Makefile itself is
+# a prerequisite — otherwise editing the resolution rebuilds nothing.
+build/luna_stage2: luna/luna.asm build/kernel Makefile | build
 	nasm -f bin $< -o $@ \
 	  -dKERNEL_FILE_SIZE_bytes=$(KERNEL_SIZE) \
 	  -dSELECTED_VIDEO_WIDTH_pixel=$(WIDTH) \

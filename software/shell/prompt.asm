@@ -121,6 +121,39 @@ shell_prompt_internal:
  jmp .end
 
 .no_cd:
+ ; probably the command: echo
+ cmp rbx, shell_command_echo_end - shell_command_echo
+ jne .no_echo ; no
+
+ ; check for the "echo" command
+ mov ecx, ebx ; size of the compared string
+ mov rdi, shell_command_echo
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
+ jc .no_echo ; the strings differ
+
+ ; set the registers to the argument list
+ mov rcx, qword [rsp]
+ sub rcx, rbx
+ add rsi, rbx
+
+ ; remove the "white characters" from the arguments, at the beginning and the end of the string
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
+
+ ; the arguments are entitled to a new line, spliced over the separator so the
+ ; whole line leaves in one write - the console publishes the cursor column
+ ; between writes, and a stale column glues the prompt to the output
+ mov byte [rsi - STATIC_BYTE_SIZE_byte], STATIC_SCANCODE_NEW_LINE
+ dec rsi
+ inc rcx
+
+ ; display the arguments
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ int KERNEL_SERVICE
+
+ ; the command has been executed
+ jmp .end
+
+.no_echo:
  ; unrecognized internal command
  stc
 
