@@ -118,6 +118,12 @@ kernel_init_vfs_files:
  db 11
  db "/bin/tetris"
 
+ dq kernel_init_vfs_file_fetch
+ dq kernel_init_vfs_file_fetch_end - kernel_init_vfs_file_fetch
+ dw KERNEL_VFS_FILE_MODE_USER_full_control | KERNEL_VFS_FILE_MODE_GROUP_execute_or_traverse | KERNEL_VFS_FILE_MODE_OTHER_execute_or_traverse
+ db 10
+ db "/bin/fetch"
+
  dq kernel_init_vfs_file_hostname
  dq kernel_init_vfs_file_hostname_end - kernel_init_vfs_file_hostname
  dw KERNEL_VFS_FILE_MODE_USER_read | KERNEL_VFS_FILE_MODE_USER_read | KERNEL_VFS_FILE_MODE_USER_read | KERNEL_VFS_FILE_MODE_OTHER_read
@@ -156,6 +162,8 @@ kernel_init_vfs_file_calculator incbin "build/calculator"
 kernel_init_vfs_file_calculator_end:
 kernel_init_vfs_file_tetris incbin "build/tetris"
 kernel_init_vfs_file_tetris_end:
+kernel_init_vfs_file_fetch incbin "build/fetch"
+kernel_init_vfs_file_fetch_end:
 
 kernel_init_vfs_file_hostname incbin "fs/etc/hostname"
 kernel_init_vfs_file_hostname_end:

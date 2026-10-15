@@ -64,6 +64,7 @@ The kernel mounts these applications under `/bin` as its initial VFS image:
 | calculator | `/bin/calculator` |
 | cat | `/bin/cat` |
 | console | `/bin/console` |
+| fetch | `/bin/fetch` |
 | hello | `/bin/hello` |
 | ls | `/bin/ls` |
 | moko | `/bin/moko` |
