@@ -5,36 +5,18 @@ fetch:
  ; complete the "stream" table with the properties of the output stream
  call fetch_stream_info
 
- ; complete the window labels with the current state of the system
+ ; display the operating system
+ mov rsi, fetch_string_os
+ mov ecx, fetch_string_os_end - fetch_string_os
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ int KERNEL_SERVICE
+
+ ; display the remaining properties of the system
  call fetch_host
  call fetch_uptime
  call fetch_memory
  call fetch_terminal
 
- ; create the window
- mov rsi, fetch_window
- macro_library LIBRARY_STRUCTURE_ENTRY.bosu
- jc fetch.close ; not enough memory space
-
- ; display the window
- mov al, KERNEL_WM_WINDOW_update
- or qword [rsi + LIBRARY_BOSU_STRUCTURE_WINDOW.SIZE + LIBRARY_BOSU_STRUCTURE_WINDOW_EXTRA.flags], LIBRARY_BOSU_WINDOW_FLAG_flush
- int KERNEL_WM_IRQ
-
-.loop:
- ; run the procedure assigned to the active element, e.g. "window close"
- mov rsi, fetch_window
- macro_library LIBRARY_STRUCTURE_ENTRY.bosu_event
-
- ; free the remaining processor time
- mov ax, KERNEL_SERVICE_PROCESS_sleep
- xor ecx, ecx ; no waiting in time
- int KERNEL_SERVICE
-
- ; continue
- jmp .loop
-
-.close:
  ; terminate the program
  xor ax, ax
  int KERNEL_SERVICE
@@ -74,23 +56,21 @@ fetch_host:
  dec rcx
 
 .limit:
- ; limit the size of the name to the size of the label
- cmp rcx, FETCH_WINDOW_VALUE_LENGTH_byte
+ ; limit the size of the name to the size of the line
+ cmp rcx, FETCH_VALUE_LENGTH_byte
  jbe .display
- mov ecx, FETCH_WINDOW_VALUE_LENGTH_byte
+ mov ecx, FETCH_VALUE_LENGTH_byte
 
 .display:
- ; remember the size of the name
- mov rax, rcx
-
- ; set the pointer to the content of the label
- mov rdi, fetch_window.element_host_string + FETCH_WINDOW_LABEL_PREFIX_length_byte
+ ; set the pointer to the end of the static part of the line
+ mov rdi, fetch_string_host + FETCH_STRING_PREFIX_length_byte
 
  ; display the name of the machine
  rep movsb
 
- ; complete the length of the label
- add byte [fetch_window.element_host_length], al
+ ; display the line
+ mov rsi, fetch_string_host
+ call fetch_line
 
 .end:
  ; return from the procedure
@@ -107,8 +87,8 @@ fetch_uptime:
  mov ecx, 1024
  div rcx
 
- ; set the pointer to the content of the label
- mov rdi, fetch_window.element_uptime_string + FETCH_WINDOW_LABEL_PREFIX_length_byte
+ ; set the pointer to the end of the static part of the line
+ mov rdi, fetch_string_uptime + FETCH_STRING_PREFIX_length_byte
 
  ; convert the number of hours
  xor edx, edx
@@ -143,9 +123,9 @@ fetch_uptime:
  mov dl, "0"
  call fetch_number
 
- ; complete the length of the label
- sub rdi, fetch_window.element_uptime_string
- mov byte [fetch_window.element_uptime_length], dil
+ ; display the line
+ mov rsi, fetch_string_uptime
+ call fetch_line
 
  ; return from the procedure
  ret
@@ -160,8 +140,8 @@ fetch_memory:
  mov rax, r8
  shl rax, STATIC_MULTIPLE_BY_4_shift
 
- ; set the pointer to the content of the label
- mov rdi, fetch_window.element_memory_string + FETCH_WINDOW_LABEL_PREFIX_length_byte
+ ; set the pointer to the end of the static part of the line
+ mov rdi, fetch_string_memory + FETCH_STRING_PREFIX_length_byte
 
  ; convert the value into a string of characters
  xor ecx, ecx
@@ -173,17 +153,17 @@ fetch_memory:
  mov rcx, fetch_string_unit_kib_end - fetch_string_unit_kib
  rep movsb
 
- ; complete the length of the label
- sub rdi, fetch_window.element_memory_string
- mov byte [fetch_window.element_memory_length], dil
+ ; display the line
+ mov rsi, fetch_string_memory
+ call fetch_line
 
  ; return from the procedure
  ret
 
  ; display the size of the terminal
 fetch_terminal:
- ; set the pointer to the content of the label
- mov rdi, fetch_window.element_terminal_string + FETCH_WINDOW_LABEL_PREFIX_length_byte
+ ; set the pointer to the end of the static part of the line
+ mov rdi, fetch_string_terminal + FETCH_STRING_PREFIX_length_byte
 
  ; convert the width of the terminal into a string of characters
  movzx eax, word [fetch_stream_meta + CONSOLE_STRUCTURE_STREAM_META.width]
@@ -201,9 +181,28 @@ fetch_terminal:
  mov dl, STATIC_EMPTY
  call fetch_number
 
- ; complete the length of the label
- sub rdi, fetch_window.element_terminal_string
- mov byte [fetch_window.element_terminal_length], dil
+ ; display the line
+ mov rsi, fetch_string_terminal
+ call fetch_line
+
+ ; return from the procedure
+ ret
+
+ ; entry:
+ ;	rsi - pointer to the beginning of the line
+ ;	rdi - pointer to the end of the line
+fetch_line:
+ ; end of the line
+ mov al, STATIC_SCANCODE_NEW_LINE
+ stosb
+
+ ; size of the line
+ mov rcx, rdi
+ sub rcx, rsi
+
+ ; display the line
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ int KERNEL_SERVICE
 
  ; return from the procedure
  ret
