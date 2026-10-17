@@ -1,6 +1,6 @@
 
 ; exit:
-;	bx - pattern of the drawn block
+;	rbx - drawn block pattern (4 rotation states, low word = active state)
 tetris_random_block:
  ; save the original registers
  push rax
@@ -21,15 +21,14 @@ tetris_random_block:
  mov dword [tetris_seed], eax
 
  ; return a value from the range of the number of available blocks
+ xor edx, edx ; the dividend is rdx:rax — rdx must be 0
  div qword [tetris_limit]
 
- ; return the result
+ ; remember the drawn piece index (for its color) and its full pattern
+ mov byte [tetris_random_index], dl
  mov rbx, tetris_bricks
  mov rbx, qword [rbx + rdx * STATIC_QWORD_SIZE_byte]
  call tetris_random_model ; choose one of the possible patterns
-
- ; remove the remaining patterns from memory
- and rbx, STATIC_WORD_mask
 
  ; restore the original registers
  pop rdx
@@ -53,6 +52,7 @@ tetris_random_model:
  macro_library LIBRARY_STRUCTURE_ENTRY.xorshift32
 
  ; return a value from the range of the number of available patterns
+ xor edx, edx ; rdx still holds the previous remainder — quotient would overflow
  div qword [tetris_limit_model]
 
  ; modify
