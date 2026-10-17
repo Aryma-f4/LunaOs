@@ -25,9 +25,6 @@ calculator:
  mov byte [calculator_window.element_label_value_length], STATIC_BYTE_SIZE_byte
 
 .refresh:
- ; display the result/state of the last operation
- call calculator_show
-
  ; update the contents of the labels
  mov rdi, calculator_window
 
