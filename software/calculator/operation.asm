@@ -8,6 +8,12 @@ calculator_operation_insert:
  ; compose both values if they exist
  call calculator_operation_compose
 
+ ; after "=", the label contains the result of the last operation - treat it as the first value of a new calculation
+ cmp byte [calculator_value_exec], "="
+ jne .not_result
+ mov r11b, STATIC_FALSE
+
+.not_result:
  ; has the first value been entered?
  cmp r11b, STATIC_TRUE
  je .first_exist ; yes
@@ -257,6 +263,12 @@ calculator_operation:
  ; save the operation character
  mov byte [calculator_value_exec], "="
 
+ ; no operation is pending
+ mov byte [calculator_window.element_label_operation_string], STATIC_SCANCODE_SPACE
+
+ ; display the result of the operation
+ call calculator_show
+
  ; end of the operation handling
  jmp .preserve
 
@@ -290,26 +302,38 @@ calculator_operation:
  jmp .end
 
 .add:
+.sub:
+.multiply:
+.divide:
+ ; nothing was entered since the last operation?
+ cmp r13b, STATIC_TRUE
+ jne .operator_insert ; something was entered, accept the value
+ cmp byte [calculator_value_exec], "="
+ je .operator_insert ; yes, but the result still has to become the first value
+
+ ; only replace the pending operation
+ mov byte [calculator_value_exec], al
+ mov byte [calculator_window.element_label_operation_string], al
+
+ ; the operation was performed
+ clc
+
+ ; end of the procedure
+ jmp .end
+
+.operator_insert:
  ; load the value into the variable
  call calculator_operation_insert
  jc .end ; no value passed
 
  ; save the operation character
- mov byte [calculator_value_exec], "+"
+ mov byte [calculator_value_exec], al
 
- ; clear the value before modifying it
- mov r13b, STATIC_TRUE
+ ; display the pending operation
+ mov byte [calculator_window.element_label_operation_string], al
 
  ; end of the procedure
  jmp .preserve
-
-.sub:
-
-.multiply:
-
-.divide:
- ; end of the operation handling
- jmp .end
 
 .preserve:
  ; clear the value before modifying it

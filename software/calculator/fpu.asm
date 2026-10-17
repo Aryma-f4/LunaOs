@@ -11,13 +11,15 @@ calculator_fpu_fraction_to_float:
  fild qword [calculator_fpu_fraction] ; st0
 
 .loop:
- ; convert to a fraction?
- dec qword [calculator_fpu_precision]
- js .end ; no
- jz .ready ; end
+ ; no more places after the comma to convert?
+ cmp qword [calculator_fpu_precision], STATIC_EMPTY
+ jle .ready ; yes
 
  ; convert the number into a fraction
  fdiv st0, st1
+
+ ; one less place after the comma
+ dec qword [calculator_fpu_precision]
  jmp .loop ; continue
 
 .ready:
@@ -48,13 +50,15 @@ calculator_fpu_float_to_fraction:
  fld qword [calculator_fpu_float_result]
 
 .loop:
- ; convert to a fraction?
- dec rcx
- js .end ; no
- jz .ready ; end
+ ; no more places after the comma to convert?
+ test rcx, rcx
+ jle .ready ; yes
 
  ; convert the fraction into a number
  fmul st0, st1
+
+ ; one less place after the comma
+ dec rcx
  jmp .loop ; continue
 
 .ready:
