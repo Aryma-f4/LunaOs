@@ -75,6 +75,25 @@ tetris_spawn:
  mov r8, TETRIS_BRICK_START_POSITION_x
  mov r9, TETRIS_BRICK_START_POSITION_y
 
+ ; the starting position overlaps the stack?
+ mov bx, word [tetris_brick_pattern]
+ call tetris_collision
+ jnc .ready
+
+ ; freeze the game and say so in the title
+ mov byte [tetris_game_over], 0x01
+ mov ecx, 0x1B ; "Tetris - game over, press R" = 27 characters
+ mov rsi, tetris_string_game_over
+ mov rdi, tetris_window
+ macro_library LIBRARY_STRUCTURE_ENTRY.bosu_header_set
+
+ ; make sure the redrawn header reaches the screen
+ mov al, KERNEL_WM_WINDOW_update
+ mov rsi, tetris_window
+ or qword [rsi + LIBRARY_BOSU_STRUCTURE_WINDOW.SIZE + LIBRARY_BOSU_STRUCTURE_WINDOW_EXTRA.flags], LIBRARY_BOSU_WINDOW_FLAG_flush
+ int KERNEL_WM_IRQ
+
+.ready:
  mov byte [tetris_tick], 0x01
 
  pop rbx
