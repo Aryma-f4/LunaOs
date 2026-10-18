@@ -189,7 +189,6 @@ kernel_gui_init:
  call kernel_page_drain
  mov qword [rel kernel_gui_taskbar_list_address], rdi ; save the pointer
 
- ; run the Console program by default
- call kernel_gui_event_console
+ ; (kernel_gui_event_console) when the user asks for it
 
  macro_debug "kernel_gui_init"
