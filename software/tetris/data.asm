@@ -87,13 +87,14 @@ tetris_window dw STATIC_EMPTY ; position on the X axis
 tetris_window_end:
 
  align STATIC_QWORD_SIZE_byte, db STATIC_NOTHING
-tetris_bricks dq 0x0720232027002620
- dq 0x6220074022301700
- dq 0x2310360023103600
- dq 0x6600660066006600
- dq 0x1320630013206300
- dq 0x0710226047003220
- dq 0x0F0022220F002222
+; order must match tetris_bricks_color: I, O, T, S, Z, J, L
+tetris_bricks dq 0x0F0022220F002222 ; I
+ dq 0x6600660066006600 ; O
+ dq 0x0720232027002620 ; T
+ dq 0x2310360023103600 ; S
+ dq 0x1320630013206300 ; Z
+ dq 0x0710226047003220 ; J
+ dq 0x6220074022301700 ; L
 tetris_bricks_end:
 
 tetris_bricks_color: ; one color per piece index, 0x00RRGGBB
