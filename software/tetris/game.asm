@@ -225,8 +225,12 @@ tetris_lock:
  ret
 
 ; lock the piece and move the game on to the next one
+; lock the piece, resolve completed lines, then move on to the next one
 tetris_settle:
  call tetris_lock
+ mov qword [tetris_cleared], STATIC_EMPTY
+ call tetris_clear_lines
+ call tetris_scoring
  call tetris_spawn
  ret
 
@@ -240,5 +244,122 @@ tetris_timer_next:
  add eax, ecx
  mov dword [tetris_next_tick], eax
  pop rcx
+ pop rax
+ ret
+
+; remove every full playable row, shifting the rows above down
+tetris_clear_lines:
+ push rax
+ push rcx
+ push rdx
+ push rsi
+ push rdi
+
+ mov qword [tetris_cleared], STATIC_EMPTY
+ mov r9, TETRIS_PLAYGROUND_HEIGHT_brick - 1 ; bottom playable row (21)
+
+.row:
+ ; full row? (playfield bits only: 0x07FE)
+ mov rdi, tetris_brick_platform
+ mov ax, word [rdi + r9 * STATIC_WORD_SIZE_byte]
+ and ax, 0000011111111110b
+ cmp ax, 0000011111111110b
+ jne .next
+
+ ; shift every row above down by one (copies also carry the wall bits)
+ mov rcx, r9
+ dec rcx
+.shift:
+ mov rdi, tetris_brick_platform
+ mov ax, word [rdi + rcx * STATIC_WORD_SIZE_byte]
+ mov word [rdi + rcx * STATIC_WORD_SIZE_byte + STATIC_WORD_SIZE_byte], ax
+ dec rcx
+ jns .shift
+
+ ; the vacated top row is empty with walls again
+ mov word [tetris_brick_platform], 0000100000000001b
+
+ ; shift the color rows the same way (source row i -> row i+1; 10-byte rows
+ ; never overlap, so a forward rep movsb is safe)
+ mov rdx, r9
+ dec rdx
+.cshift:
+ mov rax, rdx
+ imul rax, TETRIS_PLAYGROUND_WIDTH_brick
+ mov rsi, tetris_cell_color
+ add rsi, rax
+ lea rdi, [rsi + TETRIS_PLAYGROUND_WIDTH_brick]
+ mov rcx, TETRIS_PLAYGROUND_WIDTH_brick
+ cld
+ rep movsb
+ dec rdx
+ jns .cshift
+
+ ; the vacated top color row is empty
+ mov rdi, tetris_cell_color
+ xor eax, eax
+ mov rcx, TETRIS_PLAYGROUND_WIDTH_brick
+ rep stosb
+
+ inc qword [tetris_cleared]
+ jmp .row ; the row above moved down: re-check this index
+
+.next:
+ dec r9
+ jns .row
+
+ pop rdi
+ pop rsi
+ pop rdx
+ pop rcx
+ pop rax
+ ret
+
+; apply the points and advance the level / drop interval
+tetris_scoring:
+ push rax
+ push rbx
+ push rcx
+ push rdx
+ push rdi
+
+ mov rax, qword [tetris_cleared]
+ test rax, rax
+ jz .end ; nothing cleared
+
+ ; score += table[count - 1] * (level + 1)   [level before this clear]
+ mov rbx, qword [tetris_level]
+ inc rbx
+ mov rdi, tetris_score_table
+ imul rax, qword [rdi + rax * STATIC_QWORD_SIZE_byte - STATIC_QWORD_SIZE_byte]
+ imul rax, rbx
+ add qword [tetris_score], rax
+
+ ; lines += count
+ mov rax, qword [tetris_cleared]
+ add qword [tetris_lines], rax
+
+ ; level = lines / 10
+ mov rax, qword [tetris_lines]
+ xor edx, edx
+ mov ecx, STATIC_NUMBER_SYSTEM_decimal
+ div rcx
+ mov qword [tetris_level], rax
+
+ ; interval = max(minimum, initial - level * step)
+ imul rax, TETRIS_GRAVITY_step
+ mov rcx, TETRIS_GRAVITY_initial
+ sub rcx, rax
+ cmp rcx, TETRIS_GRAVITY_minimum
+ jge .interval
+ mov rcx, TETRIS_GRAVITY_minimum
+.interval:
+ mov qword [tetris_interval], rcx
+
+.end:
+ pop rdi
+ pop rdx
+ pop rcx
+ pop rbx
  pop rax
  ret

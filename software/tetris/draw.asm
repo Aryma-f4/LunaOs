@@ -219,6 +219,9 @@ tetris_draw:
  macro_library LIBRARY_STRUCTURE_ENTRY.integer_to_string
  add cl, TETRIS_LABEL_PREFIX_length
  mov byte [tetris_window.element_label_score_length], cl
+ mov rsi, tetris_window.element_label_score
+ mov rdi, tetris_window
+ macro_library LIBRARY_STRUCTURE_ENTRY.bosu_element_label
 
  ; LINES
  mov rdi, tetris_window.element_label_lines_string
@@ -237,6 +240,9 @@ tetris_draw:
  macro_library LIBRARY_STRUCTURE_ENTRY.integer_to_string
  add cl, TETRIS_LABEL_PREFIX_length
  mov byte [tetris_window.element_label_lines_length], cl
+ mov rsi, tetris_window.element_label_lines
+ mov rdi, tetris_window
+ macro_library LIBRARY_STRUCTURE_ENTRY.bosu_element_label
 
  ; LEVEL
  mov rdi, tetris_window.element_label_level_string
@@ -255,6 +261,9 @@ tetris_draw:
  macro_library LIBRARY_STRUCTURE_ENTRY.integer_to_string
  add cl, TETRIS_LABEL_PREFIX_length
  mov byte [tetris_window.element_label_level_length], cl
+ mov rsi, tetris_window.element_label_level
+ mov rdi, tetris_window
+ macro_library LIBRARY_STRUCTURE_ENTRY.bosu_element_label
 
  ; ---- push the whole frame to the screen ----
  mov al, KERNEL_WM_WINDOW_update
