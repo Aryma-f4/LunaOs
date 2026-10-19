@@ -10,6 +10,16 @@ glaze_window dw STATIC_EMPTY ; position on the X axis
  db 5
  db "Glaze                          " ; fill up to 31 bytes with STATIC_SCANCODE_SPACE characters
  dq STATIC_EMPTY ; window data space width in bytes (filled in by Bosu)
-.elements: ; end of the window elements
+.elements:
+ ; element "window close"
+.element_button_close: db LIBRARY_BOSU_ELEMENT_TYPE_button_close
+ dw .element_button_close_end - .element_button_close
+ dq glaze.close
+.element_button_close_end:
+ ; end of the window elements
  db STATIC_EMPTY
 glaze_window_end:
+
+ align STATIC_QWORD_SIZE_byte, db STATIC_NOTHING
+glaze_ipc_data:
+ times KERNEL_IPC_STRUCTURE.SIZE db STATIC_EMPTY
