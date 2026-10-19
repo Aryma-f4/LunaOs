@@ -721,7 +721,7 @@ library_bosu_element_taskbar:
  add rdi, rax
 
  ; draw the bottom edge of the element
- mov eax, 0x0000FF00
+ mov eax, STATIC_COLOR_green
  rep stosd
 
 .under_line:

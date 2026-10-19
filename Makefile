@@ -5,6 +5,12 @@ HEIGHT = 1080
 
 APPS = fetch free init wello cat console hello ls lulu glaze redia shell calculator tetris tm
 
+# Every nasm target incbin's or %include's other sources, and none of the rules
+# below could track that chain. One glob makes any source edit rebuild anything
+# that could embed it — the build takes under a second, so over-rebuilding is
+# free and a stale binary is not.
+ALL_ASM := $(shell find . -name '*.asm' -not -path './build/*')
+
 .PHONY: all run-qemu debug clean
 
 all: build/luna_disk.raw
@@ -14,15 +20,15 @@ build:
 
 # User applications. The pattern rule only matches names that exist under
 # software/, so it cannot shadow the explicit rules below.
-build/%: software/%.asm | build
+build/%: software/%.asm $(ALL_ASM) | build
 	nasm -f bin $< -o $@
 
 # Application support library, incbin'd by the kernel.
-build/library: kernel/library.asm | build
+build/library: kernel/library.asm $(ALL_ASM) | build
 	nasm -f bin $< -o $@
 
 # Application-support module, incbin'd by the kernel alongside the VFS files.
-build/boot: kernel/init/boot.asm | build
+build/boot: kernel/init/boot.asm $(ALL_ASM) | build
 	nasm -f bin $< -o $@
 
 # The kernel embeds all eleven upstream applications, boot, library and the two
@@ -34,7 +40,7 @@ KERNEL_VFS_DEPS = $(addprefix build/,$(KERNEL_VFS_APPS)) build/boot build/librar
                   fs/etc/hostname fs/var/welcome.txt
 
 # 64-bit kernel, incbin'd by stage 2.
-build/kernel: kernel.asm $(KERNEL_VFS_DEPS) | build
+build/kernel: kernel.asm $(KERNEL_VFS_DEPS) $(ALL_ASM) | build
 	nasm -f bin $< -o $@
 
 # Recursive assignment, so the size is read when the recipe runs and the
