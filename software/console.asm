@@ -95,6 +95,15 @@ console:
  ; stop the further execution of the code
  jmp .loop
 
+.minimize:
+ ; hide the window, the process keeps running
+ mov al, KERNEL_WM_WINDOW_minimize
+ mov rsi, console_window
+ int KERNEL_WM_IRQ
+
+ ; return from the action handler procedure
+ ret
+
  macro_debug "software: console"
 
  %include "software/console/data.asm"
