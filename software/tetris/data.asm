@@ -97,14 +97,14 @@ tetris_bricks dq 0x0F0022220F002222 ; I
  dq 0x6220074022301700 ; L
 tetris_bricks_end:
 
-tetris_bricks_color: ; one color per piece index, 0x00RRGGBB
- dd 0x0000FFFF ; 0 - I, cyan
- dd 0x00FFFF00 ; 1 - O, yellow
- dd 0x00800080 ; 2 - T, purple
- dd 0x0000FF00 ; 3 - S, green
- dd 0x00FF0000 ; 4 - Z, red
- dd 0x000000FF ; 5 - J, blue
- dd 0x00FFA500 ; 6 - L, orange
+tetris_bricks_color: ; Everblush palette, one color per piece index, 0x00RRGGBB
+ dd 0x006CBFBF ; 0 - I, cyan
+ dd 0x00E5C76B ; 1 - O, yellow
+ dd 0x00C47FD5 ; 2 - T, magenta
+ dd 0x008CCF7E ; 3 - S, green
+ dd 0x00E57474 ; 4 - Z, red
+ dd 0x0067B0E8 ; 5 - J, blue
+ dd 0x00B3B9B8 ; 6 - L, light gray
 
 tetris_cell_color:
  times TETRIS_PLAYGROUND_HEIGHT_brick * TETRIS_PLAYGROUND_WIDTH_brick db STATIC_EMPTY
