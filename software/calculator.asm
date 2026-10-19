@@ -90,11 +90,24 @@ calculator:
  cmp byte [rsi], LIBRARY_BOSU_ELEMENT_TYPE_button_close
  je .close ; yes
 
+ ; an element of the "Button Minimize" type?
+ cmp byte [rsi], LIBRARY_BOSU_ELEMENT_TYPE_button_minimize
+ je .minimize ; yes
+
  ; fetch the value of the element
  movzx eax, word [rsi + LIBRARY_BOSU_STRUCTURE_ELEMENT_BUTTON.element + LIBRARY_BOSU_STRUCTURE_ELEMENT.event]
 
  ; perform the operation
  jmp .operation
+
+.minimize:
+ ; hide the window, keep the process running
+ mov al, KERNEL_WM_WINDOW_minimize
+ mov rsi, calculator_window
+ int KERNEL_WM_IRQ
+
+ ; return to the main loop
+ jmp .loop
 
 .close:
  ; terminate the program

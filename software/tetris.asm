@@ -123,6 +123,15 @@ tetris_input:
  pop rax
  ret
 
+tetris.minimize:
+ ; hide the window, the process keeps running
+ mov al, KERNEL_WM_WINDOW_minimize
+ mov rsi, tetris_window
+ int KERNEL_WM_IRQ
+
+ ; return from the action handler procedure
+ ret
+
 tetris.close:
  ; terminate the program
  xor ax, ax

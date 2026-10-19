@@ -25,6 +25,10 @@ kernel_wm_irq:
  cmp al, KERNEL_WM_WINDOW_update
  je .window_update ; yes
 
+ ; toggle the visibility of the object?
+ cmp al, KERNEL_WM_WINDOW_minimize
+ je .window_minimize ; yes
+
 .error:
  ; flag, error
  stc
@@ -85,6 +89,49 @@ kernel_wm_irq:
  jmp kernel_wm_irq.end
 
  macro_debug "kernel_wm_irq.window_close"
+
+; input:
+;	rsi - pointer to the window structure
+.window_minimize:
+ ; preserve the original registers
+ push rax
+ push rbx
+ push rsi
+
+ ; look for the object with the given identifier
+ mov rbx, qword [rsi + KERNEL_WM_STRUCTURE_OBJECT.SIZE + KERNEL_WM_STRUCTURE_OBJECT_EXTRA.id]
+ call kernel_wm_object_by_id
+
+ ; fetch the process PID
+ call kernel_task_active_pid
+
+ ; does the object belong to the process?
+ cmp rax, qword [rsi + KERNEL_WM_STRUCTURE_OBJECT.SIZE + KERNEL_WM_STRUCTURE_OBJECT_EXTRA.pid]
+ jne .window_minimize_error ; no
+
+ ; change the visibility of the object
+ xor word [rsi + KERNEL_WM_STRUCTURE_OBJECT.SIZE + KERNEL_WM_STRUCTURE_OBJECT_EXTRA.flags], KERNEL_WM_OBJECT_FLAG_visible
+
+ ; notify the window manager
+ or word [rsi + KERNEL_WM_STRUCTURE_OBJECT.SIZE + KERNEL_WM_STRUCTURE_OBJECT_EXTRA.flags], KERNEL_WM_OBJECT_FLAG_undraw
+
+ ; end of the procedure
+ jmp .window_minimize_end
+
+.window_minimize_error:
+ ; flag, error
+ stc
+
+.window_minimize_end:
+ ; restore the original registers
+ pop rsi
+ pop rbx
+ pop rax
+
+ ; end of the option handling
+ jmp kernel_wm_irq.end
+
+ macro_debug "kernel_wm_irq.window_minimize"
 
 
 ; input:

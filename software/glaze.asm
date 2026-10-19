@@ -40,11 +40,24 @@ glaze:
  cmp byte [rsi], LIBRARY_BOSU_ELEMENT_TYPE_button_close
  je glaze.close ; yes, terminate the program
 
+ ; element of the "Button Minimize" type?
+ cmp byte [rsi], LIBRARY_BOSU_ELEMENT_TYPE_button_minimize
+ je glaze.minimize ; yes, hide the window
+
 .sleep:
  ; free the remaining processor time
  mov ax, KERNEL_SERVICE_PROCESS_sleep
  xor ecx, ecx ; no waiting in time
  int KERNEL_SERVICE
+
+ ; return to the main loop
+ jmp .loop
+
+.minimize:
+ ; hide the window, keep the process running
+ mov al, KERNEL_WM_WINDOW_minimize
+ mov rsi, glaze_window
+ int KERNEL_WM_IRQ
 
  ; return to the main loop
  jmp .loop

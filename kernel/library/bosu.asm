@@ -493,9 +493,64 @@ library_bosu_element_button_close:
  macro_debug "library_bosu_element_button_close"
 
 ; input:
-;	rsi - pointer to the window properties
+;	rdi - pointer to the window properties
+;	r8 - window width in pixels
+;	r10 - window scanline in bytes
 library_bosu_element_button_minimize:
- xchg bx,bx
+ ; preserve the original registers
+ push rax
+ push rcx
+ push rsi
+ push rdi
+
+ ; store the pointer to the window structure
+ mov rsi, rdi
+
+ ; set the pointer to the element position
+ xor rdi, rdi
+
+ ; position on the X axis: the box left of the close button
+ mov rax, r8
+ sub rax, LIBRARY_BOSU_ELEMENT_BUTTON_CLOSE_width + LIBRARY_BOSU_ELEMENT_BUTTON_MINIMIZE_width
+
+ ; does the window have borders?
+ test word [rsi + LIBRARY_BOSU_STRUCTURE_WINDOW.SIZE + LIBRARY_BOSU_STRUCTURE_WINDOW_EXTRA.flags], LIBRARY_BOSU_WINDOW_FLAG_border
+ jz .no_border ; no
+
+ ; fix the position on the X axis
+ sub rax, LIBRARY_BOSU_WINDOW_BORDER_THICKNESS_pixel
+
+ ; fix the position on the Y axis
+ add rdi, r10
+
+.no_border:
+ ; target position of the stroke: 5 pixels right on the X axis
+ add rax, 0x05
+ shl rax, KERNEL_VIDEO_DEPTH_shift
+ add rdi, rax
+
+ ; and 11 pixels down on the Y axis
+ imul rax, r10, 0x0B
+ add rdi, rax
+ add rdi, qword [rsi + LIBRARY_BOSU_STRUCTURE_WINDOW.address]
+
+ ; color and size of the stroke
+ mov rax, LIBRARY_BOSU_ELEMENT_BUTTON_FOREGROUND_color
+ mov ecx, 0x08
+
+.stroke:
+ ; draw
+ stosd
+
+ ; end of the stroke?
+ dec rcx
+ jnz .stroke ; no
+
+ ; restore the original registers
+ pop rdi
+ pop rsi
+ pop rcx
+ pop rax
 
  ; return from the procedure
  ret
@@ -860,6 +915,14 @@ library_bosu_header_update:
  sub r11, LIBRARY_BOSU_ELEMENT_BUTTON_CLOSE_width
 
 .no_close:
+ ; minimize control button?
+ test word [rsi + LIBRARY_BOSU_STRUCTURE_WINDOW.SIZE + LIBRARY_BOSU_STRUCTURE_WINDOW_EXTRA.flags], LIBRARY_BOSU_WINDOW_FLAG_BUTTON_min
+ jz .no_min ; no
+
+ ; fix up the element width
+ sub r11, LIBRARY_BOSU_ELEMENT_BUTTON_MINIMIZE_width
+
+.no_min:
  ; set the header height and scanline
  mov r12, LIBRARY_BOSU_HEADER_HEIGHT_pixel
  mov r13, r11
@@ -1429,12 +1492,23 @@ library_bosu_element_subroutine:
 
  ; element of type: button close?
  cmp byte [rsi + LIBRARY_BOSU_STRUCTURE_TYPE.set], LIBRARY_BOSU_ELEMENT_TYPE_button_close
+ je .button_close ; yes
+
+ ; element of type: button minimize?
+ cmp byte [rsi + LIBRARY_BOSU_STRUCTURE_TYPE.set], LIBRARY_BOSU_ELEMENT_TYPE_button_minimize
  jne .no_button_close ; no
 
+ ; element position on the X axis: the box left of the close button
+ movzx eax, word [rdi + LIBRARY_BOSU_STRUCTURE_WINDOW.field + LIBRARY_BOSU_STRUCTURE_FIELD.width]
+ sub rax, LIBRARY_BOSU_ELEMENT_BUTTON_CLOSE_width + LIBRARY_BOSU_ELEMENT_BUTTON_MINIMIZE_width
+ jmp .button_box
+
+.button_close:
  ; element position on the X axis
  movzx eax, word [rdi + LIBRARY_BOSU_STRUCTURE_WINDOW.field + LIBRARY_BOSU_STRUCTURE_FIELD.width]
  sub rax, LIBRARY_BOSU_ELEMENT_BUTTON_CLOSE_width
 
+.button_box:
  ; element position on the Y axis
  xor ecx, ecx
 

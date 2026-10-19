@@ -14,7 +14,7 @@ tetris_window dw STATIC_EMPTY ; position on the X axis
  dw TETRIS_WINDOW_HEIGHT_pixel ; window height
  dq STATIC_EMPTY ; pointer to the window data space (filled in by Bosu)
 .extra: dd STATIC_EMPTY ; size of the window data space in bytes (filled in by Bosu)
- dw LIBRARY_BOSU_WINDOW_FLAG_visible | LIBRARY_BOSU_WINDOW_FLAG_header | LIBRARY_BOSU_WINDOW_FLAG_border | LIBRARY_BOSU_WINDOW_FLAG_BUTTON_close
+ dw LIBRARY_BOSU_WINDOW_FLAG_visible | LIBRARY_BOSU_WINDOW_FLAG_header | LIBRARY_BOSU_WINDOW_FLAG_border | LIBRARY_BOSU_WINDOW_FLAG_BUTTON_close | LIBRARY_BOSU_WINDOW_FLAG_BUTTON_min
  dq STATIC_EMPTY ; window identifier (filled in by Bosu)
  db 6 ; length of the title: "Tetris" (was 5 -> showed "Tetri")
  db "Tetris                         " ; fill up to 31 bytes with STATIC_SCANCODE_SPACE characters
@@ -25,6 +25,11 @@ tetris_window dw STATIC_EMPTY ; position on the X axis
  dw .element_button_close_end - .element_button_close
  dq tetris.close
 .element_button_close_end:
+.element_button_minimize: ; element "window minimize"
+ db LIBRARY_BOSU_ELEMENT_TYPE_button_minimize
+ dw .element_button_minimize_end - .element_button_minimize
+ dq tetris.minimize
+.element_button_minimize_end:
  ; element "playground"
 .element_playground: db LIBRARY_BOSU_ELEMENT_TYPE_draw
  dw .element_playground_end - .element_playground
