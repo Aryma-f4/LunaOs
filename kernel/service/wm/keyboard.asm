@@ -14,6 +14,10 @@ kernel_wm_keyboard:
  test rsi, rsi
  jz .end ; yes, ignore the key
 
+ ; is the object visible? a minimized window receives no keys
+ test word [rsi + KERNEL_WM_STRUCTURE_OBJECT.SIZE + KERNEL_WM_STRUCTURE_OBJECT_EXTRA.flags], KERNEL_WM_OBJECT_FLAG_visible
+ jz .end ; no, ignore the key
+
  ; send the keyboard information to the process owning the object
  call kernel_wm_ipc_keyboard
 

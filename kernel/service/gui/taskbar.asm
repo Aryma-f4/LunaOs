@@ -176,6 +176,7 @@ kernel_gui_taskbar_event:
  ; fetch the pointer to the object based on the window identifier
  mov rbx, qword [rsi + LIBRARY_BOSU_STRUCTURE_ELEMENT_TASKBAR.element + LIBRARY_BOSU_STRUCTURE_ELEMENT.event]
  call kernel_wm_object_by_id
+ jc .end ; the entry is stale, the object is already gone
 
  ; change the visibility of the object
  xor word [rsi + KERNEL_WM_STRUCTURE_OBJECT.SIZE + KERNEL_WM_STRUCTURE_OBJECT_EXTRA.flags], KERNEL_WM_OBJECT_FLAG_visible
@@ -183,6 +184,15 @@ kernel_gui_taskbar_event:
  ; notify the window manager
  or word [rsi + KERNEL_WM_STRUCTURE_OBJECT.SIZE + KERNEL_WM_STRUCTURE_OBJECT_EXTRA.flags], KERNEL_WM_OBJECT_FLAG_undraw
 
+ ; the action restored the visibility? focus the object, so its process
+ ; receives the keyboard information again
+ test word [rsi + KERNEL_WM_STRUCTURE_OBJECT.SIZE + KERNEL_WM_STRUCTURE_OBJECT_EXTRA.flags], KERNEL_WM_OBJECT_FLAG_visible
+ jz .unfocused ; no, the object was just hidden
+
+ ; remember the pointer to the selected object
+ mov qword [rel kernel_wm_object_active_pointer], rsi
+
+.unfocused:
  ; process the taskbar once again
  mov qword [rel kernel_gui_window_taskbar_modify_time], STATIC_EMPTY
 
