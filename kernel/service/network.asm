@@ -52,6 +52,8 @@ service_network:
 
  macro_debug "service_network"
 
+service_network_end:
+
 ; input:
 ;	rsi - pointer to the incoming packet
 service_network_ip:

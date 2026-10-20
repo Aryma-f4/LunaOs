@@ -103,13 +103,21 @@ service_network_tcp_psh:
  sub rcx, qword [rsp]
  rep stosb
 
+ ; account for the received data in the expected sequence number
+ mov rdi, qword [rsp + STATIC_QWORD_SIZE_byte * 2] ; connection
+ mov ecx, dword [rsp]
+ sub ecx, edx ; the size of the data without the TCP header
+ add dword [rdi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.source_sequence], ecx
+
  ; fetch the PID of the destination process
  mov rbx, qword [rel service_network_port_table]
  mov rbx, qword [rbx + rax]
 
  ; send a message to the process
+ ; template: [rsp]=size, [rsp+8]=buffer, [rsp+16]=connection
+ ; which insert reads from rsi+32 (.data), so rsi = rsp-32
  xor ecx, ecx
- mov rsi, rsp
+ lea rsi, [rsp - STATIC_QWORD_SIZE_byte * 4]
  call kernel_ipc_insert
 
  ; release the local variable
@@ -156,17 +164,6 @@ service_network_tcp_fin:
  bswap eax ; save in the Little-Endian format
  inc eax ; acknowledge the receipt of the wish to end the connection
  mov dword [rsi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.source_sequence], eax
-
-
- ; our sequence number
- mov eax, dword [rsi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.request_acknowledgement]
- inc eax
- mov dword [rsi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.host_sequence], eax
-
- ; our identifier
- inc eax
- mov dword [rsi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.request_acknowledgement], eax
-
 
  ; closing the connection
  mov word [rsi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.flags], SERVICE_NETWORK_FRAME_TCP_FLAGS_ack | SERVICE_NETWORK_FRAME_TCP_FLAGS_fin
@@ -371,6 +368,7 @@ service_network_tcp_syn:
  ; save the sender sequence number
  mov eax, dword [rsi + rcx + SERVICE_NETWORK_STRUCTURE_FRAME_TCP.sequence]
  bswap eax ; in the Little-Endian format
+ inc eax ; acknowledge the SYN flag with the next expected sequence number
  mov dword [rdi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.source_sequence], eax
 
  ; save the sender MAC address
@@ -402,6 +400,9 @@ service_network_tcp_syn:
 
  ; send the response
  call service_network_tcp_reply
+
+ ; the SYN flag consumes one sequence number
+ inc dword [rsi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.host_sequence]
 
 .end:
  ; restore the original registers
@@ -581,11 +582,11 @@ service_network_tcp_port_send:
  pop rdi
  pop rcx
 
- inc dword [rbx + SERVICE_NETWORK_STRUCTURE_TCP_STACK.host_sequence]
+ ; current flags of the data frame
  mov byte [rbx + SERVICE_NETWORK_STRUCTURE_TCP_STACK.flags], SERVICE_NETWORK_FRAME_TCP_FLAGS_psh | SERVICE_NETWORK_FRAME_TCP_FLAGS_ack
 
  ; fill the packet frames
- add rcx, SERVICE_NETWORK_STRUCTURE_FRAME_TCP.SIZE + 0x01
+ add rcx, SERVICE_NETWORK_STRUCTURE_FRAME_TCP.SIZE
  mov rsi, rbx
  mov bl, SERVICE_NETWORK_FRAME_TCP_HEADER_LENGTH_default
  call service_network_tcp_wrap
@@ -594,6 +595,10 @@ service_network_tcp_port_send:
  mov rax, rcx
  add rax, SERVICE_NETWORK_STRUCTURE_FRAME_ETHERNET.SIZE + SERVICE_NETWORK_STRUCTURE_FRAME_IP.SIZE
  call service_network_transfer
+
+ ; the data sent consumes its size in sequence numbers
+ sub rcx, SERVICE_NETWORK_STRUCTURE_FRAME_TCP.SIZE
+ add dword [rsi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.host_sequence], ecx
 
 .end:
  ; restore the original registers
@@ -607,3 +612,49 @@ service_network_tcp_port_send:
  ret
 
  macro_debug "service_network_tcp_port_send"
+
+; input:
+;	rbx - connection identifier
+service_network_tcp_port_close:
+ ; preserve the original registers
+ push rax
+ push rbx
+ push rcx
+ push rsi
+ push rdi
+
+ ; prepare space for the response
+ call kernel_memory_alloc_page
+ jc .end ; no space
+
+ ; closing the connection
+ mov word [rbx + SERVICE_NETWORK_STRUCTURE_TCP_STACK.flags], SERVICE_NETWORK_FRAME_TCP_FLAGS_fin | SERVICE_NETWORK_FRAME_TCP_FLAGS_ack
+
+ ; expect the ACK flag in the response
+ mov word [rbx + SERVICE_NETWORK_STRUCTURE_TCP_STACK.flags_request], SERVICE_NETWORK_FRAME_TCP_FLAGS_ack
+
+ ; wrap the TCP frame data
+ mov rsi, rbx
+ mov ecx, SERVICE_NETWORK_STRUCTURE_FRAME_TCP.SIZE
+ mov bl, SERVICE_NETWORK_FRAME_TCP_HEADER_LENGTH_default
+ call service_network_tcp_wrap
+
+ ; send the packet
+ mov eax, SERVICE_NETWORK_STRUCTURE_FRAME_ETHERNET.SIZE + SERVICE_NETWORK_STRUCTURE_FRAME_IP.SIZE + SERVICE_NETWORK_STRUCTURE_FRAME_TCP.SIZE
+ call service_network_transfer
+
+ ; the FIN flag consumes one sequence number
+ inc dword [rsi + SERVICE_NETWORK_STRUCTURE_TCP_STACK.host_sequence]
+
+.end:
+ ; restore the original registers
+ pop rdi
+ pop rsi
+ pop rcx
+ pop rbx
+ pop rax
+
+ ; return from the procedure
+ ret
+
+ macro_debug "service_network_tcp_port_close"

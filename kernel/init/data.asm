@@ -34,6 +34,18 @@ kernel_init_services_list:
  dq kernel_gui_end - kernel_gui
  db 24
  db "graphical user interface"
+ dq service_tx
+ dq service_tx_end - service_tx
+ db 16
+ db "network transmit"
+ dq service_network
+ dq service_network_end - service_network
+ db 15
+ db "network service"
+ dq service_http
+ dq service_http_end - service_http
+ db 12
+ db "http service"
 
  ; end of services
  dq STATIC_EMPTY

@@ -26,6 +26,7 @@ DRIVER_NIC_I82540EM_CTRL_PHY_RST equ 0x7FFFFFFF ; NASM ERROR => 0x80000000	; PHY
 DRIVER_NIC_I82540EM_STATUS equ 0x0008 ; Device Status Register
 DRIVER_NIC_I82540EM_EECD equ 0x0010 ; EEPROM/Flash Control & Data Register
 DRIVER_NIC_I82540EM_EERD equ 0x0014 ; EEPROM Read Register
+DRIVER_NIC_I82540EM_EERD_done equ 0x04 ; Read Complete (bit index for BT, QEMU value 0x10)
 DRIVER_NIC_I82540EM_CTRLEXT equ 0x0018 ; Extended Control Register
 DRIVER_NIC_I82540EM_MDIC equ 0x0020 ; MDI Control Register
 DRIVER_NIC_I82540EM_FCAL equ 0x0028 ; Flow Control Address Low
@@ -34,7 +35,10 @@ DRIVER_NIC_I82540EM_FCT equ 0x0030 ; Flow Control Type
 DRIVER_NIC_I82540EM_VET equ 0x0038 ; VLAN Ether Type
 DRIVER_NIC_I82540EM_ICR_register equ 0x00C0 ; Interrupt Cause Read
 DRIVER_NIC_I82540EM_ICR_register_flag_TXQE equ 1 ; Transmit Queue Empty
-DRIVER_NIC_I82540EM_ICR_register_flag_RXT0 equ 7 ; Receiver Timer Interrupt
+DRIVER_NIC_I82540EM_ICR_register_flag_LSC equ 2 ; Link Status Change
+DRIVER_NIC_I82540EM_ICR_register_flag_RXDMT0 equ 4 ; Receive Descriptor Minimum Threshold Reached
+DRIVER_NIC_I82540EM_ICR_register_flag_RXO equ 6 ; Receiver Overrun
+DRIVER_NIC_I82540EM_ICR_register_flag_RXT0 equ 7 ; Receive Timer Interrupt (ring 0)
 DRIVER_NIC_I82540EM_ITR equ 0x00C4 ; Interrupt Throttling Register
 DRIVER_NIC_I82540EM_ICS equ 0x00C8 ; Interrupt Cause Set Register
 DRIVER_NIC_I82540EM_IMS equ 0x00D0 ; Interrupt Mask Set/Read Register
@@ -93,6 +97,8 @@ DRIVER_NIC_I82540EM_TDESC_STATUS_TU equ 0x0000000800000000 ; Transmit Underrun
 DRIVER_NIC_I82540EM_TDESC_STATUS_LC equ 0x0000000400000000 ; Late Collision
 DRIVER_NIC_I82540EM_TDESC_STATUS_EC equ 0x0000000200000000 ; Excess Collision
 DRIVER_NIC_I82540EM_TDESC_STATUS_DD equ 0x0000000100000000 ; Descriptor Done
+DRIVER_NIC_I82540EM_RDESC_STATUS_DD equ 0x01 ; Descriptor Done (packet written into the buffer)
+DRIVER_NIC_I82540EM_RDESC_STATUS_EOP equ 0x02 ; End Of Packet
 DRIVER_NIC_I82540EM_TDESC_CMD_IDE equ 0x0000000080000000 ; Interrupt Delay Enable
 DRIVER_NIC_I82540EM_TDESC_CMD_VLE equ 0x0000000040000000 ; VLAN Packet Enable
 DRIVER_NIC_I82540EM_TDESC_CMD_DEXT equ 0x0000000020000000 ; Extension (0b for legacy mode)
@@ -215,32 +221,46 @@ driver_nic_i82540em_irq:
  ; descriptor queue empty
  mov byte [rel driver_nic_i82540em_tx_queue_empty_semaphore], STATIC_TRUE
 
- ; end of interrupt handling
- jmp .end
+ ; an interrupt can carry both events, check the receive path as well
 
 .no_txqe:
  ; incoming packet?
  bt eax, DRIVER_NIC_I82540EM_ICR_register_flag_RXT0
- jnc .received
+ jnc .end ; no, nothing to do with the receive ring
 
- ; hand the buffer holding the packet over to the network service
+ ; point at the first descriptor of the receive ring
+ mov rsi, qword [rel driver_nic_i82540em_rx_base_address]
+
+ ; did the controller finish writing the packet into the buffer?
+ test byte [rsi + DRIVER_NIC_I82540EM_STRUCTURE_RCTL_RDESC_entry.status], DRIVER_NIC_I82540EM_RDESC_STATUS_DD
+ jz .end ; no, leave the ring alone
+
+ ; the network service is available?
  mov rbx, qword [rel service_network_pid]
  test rbx, rbx
- jz .received ; the network service is not available yet, drop the incoming packet
+ jz .received ; no, drop the packet and keep the buffer in the descriptor
 
- ; take the address and size of the buffer holding the packet from the receive descriptor of the network interface
- mov rsi, qword [rel driver_nic_i82540em_rx_base_address]
+ ; the size of the packet
  movzx ecx, word [rsi + DRIVER_NIC_I82540EM_STRUCTURE_RCTL_RDESC_entry.length]
+ test rcx, rcx
+ jz .received ; empty, release the descriptor without handing it over
+
+ ; hand the buffer holding the packet over to the network service
  mov rsi, qword [rsi + DRIVER_NIC_I82540EM_STRUCTURE_RCTL_RDESC_entry.base_address]
 
- ; allocate a new buffer for the packet
+ ; allocate a new buffer for the next packet
  call driver_nic_i82540em_rx_release
+ jc .received ; no free space, drop the packet and keep the buffer in the descriptor
 
  ; send the message
  call kernel_ipc_insert
 
 .received:
  ; tell the controller that the packet has been processed
+ mov rsi, qword [rel driver_nic_i82540em_rx_base_address]
+ mov qword [rsi + DRIVER_NIC_I82540EM_STRUCTURE_RCTL_RDESC_entry.length], STATIC_EMPTY ; clear the length, checksum, status and errors of the descriptor
+
+ ; point at the controller registers
  mov rsi, qword [rel driver_nic_i82540em_mmio_base_address]
  mov dword [rsi + DRIVER_NIC_I82540EM_RDH], 0x00
  mov dword [rsi + DRIVER_NIC_I82540EM_RDT], 0x01
@@ -280,7 +300,7 @@ driver_nic_i82540em_rx_release:
  jc .end ; no free space
 
  ; set the new buffer
- mov qword [rax + DRIVER_NIC_I82540EM_TDESC_BASE_ADDRESS], rdi
+ mov qword [rax + DRIVER_NIC_I82540EM_STRUCTURE_RCTL_RDESC_entry.base_address], rdi
 
 .end:
  ; restore the original register
@@ -331,6 +351,9 @@ driver_nic_i82540em_transfer:
  mov rax, DRIVER_NIC_I82540EM_TDESC_STATUS_DD
  test rax, qword [rsi + DRIVER_NIC_I82540EM_TDESC_LENGTH_AND_FLAGS]
  jz .status ; the packet did not reach the FIFO, check once more
+
+ ; the controller is done with the descriptor, the queue is available again
+ mov byte [rel driver_nic_i82540em_tx_queue_empty_semaphore], STATIC_TRUE
 
  ; restore the original registers
  pop rax
@@ -390,6 +413,18 @@ driver_nic_i82540em:
  ; save the interrupt line of the controller
  mov byte [rel driver_nic_i82540em_irq_number], al
 
+ ; the controller must be allowed to read/write system memory,
+ ; otherwise it drops every incoming packet
+ ;	I/O Space | Memory Space | Bus Master Enable
+ mov eax, DRIVER_PCI_REGISTER_status_and_command
+ call driver_pci_read
+ or eax, 0x07
+ push rsi
+ mov esi, eax
+ mov eax, DRIVER_PCI_REGISTER_status_and_command
+ call driver_pci_write
+ pop rsi
+
  ; map the controller register space into the kernel page tables
  mov rax, qword [rel driver_nic_i82540em_mmio_base_address]
  mov rbx, KERNEL_PAGE_FLAG_available | KERNEL_PAGE_FLAG_write
@@ -401,23 +436,29 @@ driver_nic_i82540em:
 
  ; read the contents of the register at address 0x00
  mov dword [rsi + DRIVER_NIC_I82540EM_EERD], 0x00000001
+.eerd0:
  mov eax, dword [rsi + DRIVER_NIC_I82540EM_EERD]
+ bt eax, DRIVER_NIC_I82540EM_EERD_done
+ jnc .eerd0 ; not ready yet
  shr eax, STATIC_MOVE_HIGH_TO_AX_shift
- ; zachowaj
  mov word [rel driver_nic_i82540em_mac_address + SERVICE_NETWORK_STRUCTURE_MAC.0], ax
 
  ; read the contents of the register at address 0x01
  mov dword [rsi + DRIVER_NIC_I82540EM_EERD], 0x00000101
+.eerd1:
  mov eax, dword [rsi + DRIVER_NIC_I82540EM_EERD]
+ bt eax, DRIVER_NIC_I82540EM_EERD_done
+ jnc .eerd1 ; not ready yet
  shr eax, STATIC_MOVE_HIGH_TO_AX_shift
- ; zachowaj
  mov word [rel driver_nic_i82540em_mac_address + SERVICE_NETWORK_STRUCTURE_MAC.2], ax
 
  ; read the contents of the register at address 0x02
  mov dword [rsi + DRIVER_NIC_I82540EM_EERD], 0x00000201
+.eerd2:
  mov eax, dword [rsi + DRIVER_NIC_I82540EM_EERD]
+ bt eax, DRIVER_NIC_I82540EM_EERD_done
+ jnc .eerd2 ; not ready yet
  shr eax, STATIC_MOVE_HIGH_TO_AX_shift
- ; zachowaj
  mov word [rel driver_nic_i82540em_mac_address + SERVICE_NETWORK_STRUCTURE_MAC.4], ax
 
  ; disable every interrupt type on the controller
@@ -553,8 +594,13 @@ driver_nic_i82540em_setup:
 
  ; enable the controller interrupts
  ; documentation, page 311/410, item 13.4.20
+ ; only the events the handler actually processes: link status change,
+ ; receiver timer (a packet has been written into a buffer) and transmit queue empty
  mov rdi, qword [rel driver_nic_i82540em_mmio_base_address]
- mov dword [rdi + DRIVER_NIC_I82540EM_IMS], 00000000000000011111011011011111b
+ mov eax, 1 << DRIVER_NIC_I82540EM_ICR_register_flag_LSC
+ or eax, 1 << DRIVER_NIC_I82540EM_ICR_register_flag_RXT0
+ or eax, 1 << DRIVER_NIC_I82540EM_ICR_register_flag_TXQE
+ mov dword [rdi + DRIVER_NIC_I82540EM_IMS], eax
 
  ; restore the original registers
  pop rdi

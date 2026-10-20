@@ -49,8 +49,11 @@ service_http:
  ; send the response
  call service_network_tcp_port_send
 
- ; stop further code execution
- jmp $
+ ; close the connection, the response has no length header
+ call service_network_tcp_port_close
+
+ ; serve the next query
+ jmp .loop
 
 service_http_get_root db "GET / "
 service_http_get_root_end:
@@ -68,3 +71,5 @@ service_http_404 db "HTTP/1.0 404 Not Found", STATIC_SCANCODE_NEW_LINE
  db "404 Content not found.", STATIC_SCANCODE_NEW_LINE
  service_http_macro_foot
 service_http_404_end:
+
+service_http_end:

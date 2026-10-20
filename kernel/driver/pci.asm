@@ -242,7 +242,8 @@ driver_pci_read:
  ret
 
 ; input:
-;	eax - value
+;	eax - address of the register to write
+;	esi - value
 ;
 ;	bl - szyna
 ;	cl - device
@@ -252,7 +253,6 @@ driver_pci_write:
  push rbx
  push rcx
  push rdx
- push rax
 
  ; set bit 31
  or eax, 0x80000000
@@ -276,10 +276,8 @@ driver_pci_write:
  mov dx, DRIVER_PCI_PORT_command
  out dx, eax
 
- ; restore the value to be sent
- pop rax
-
  ; send
+ mov eax, esi
  mov dx, DRIVER_PCI_PORT_data
  out dx, eax
 
