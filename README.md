@@ -1,3 +1,5 @@
+![image](.github/banner.png)
+
 # LunaOs
 
 Multitasking operating system written in x86-64 assembly (formerly aidenOS). Features LFB framebuffer video, bitmap-based memory allocator, 4-level paging, round-robin scheduler, ACPI (RSDT/XSDT) with SMP support, and a network-enabled interactive shell.
