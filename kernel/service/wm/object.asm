@@ -600,10 +600,26 @@ kernel_wm_object_remove:
  ; flag, error
  stc
 
- ; end of the procedure handling
- jmp .end
+ ; the object was not on the list - keep the list intact
+ jmp .unlock
 
 .found:
+ ; does the active object point to the removed one?
+ cmp qword [rel kernel_wm_object_active_pointer], rsi
+ jne .not_active ; no
+
+ ; drop the pointer, otherwise keystrokes would target a removed window
+ mov qword [rel kernel_wm_object_active_pointer], STATIC_EMPTY
+
+.not_active:
+ ; the same for the selected object, used while moving with the button held
+ cmp qword [rel kernel_wm_object_selected_pointer], rsi
+ jne .shift ; no
+
+ ; drop the pointer
+ mov qword [rel kernel_wm_object_selected_pointer], STATIC_EMPTY
+
+.shift:
  ; set the source and destination pointers
  mov rsi, rdi
  add rsi, KERNEL_WM_STRUCTURE_OBJECT_LIST_ENTRY.SIZE
@@ -611,7 +627,6 @@ kernel_wm_object_remove:
  ; shift all remaining entries one position back
  rep movsq
 
-.end:
  ; number of records on the list
  dec qword [rel kernel_wm_object_list_length]
 
@@ -619,6 +634,7 @@ kernel_wm_object_remove:
  mov rcx, qword [rel driver_rtc_microtime]
  mov qword [rel kernel_wm_object_list_modify_time], rcx
 
+.unlock:
  ; release access to modifying the object list
  mov byte [rel kernel_wm_object_semaphore], STATIC_FALSE
 
