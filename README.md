@@ -105,7 +105,7 @@ The kernel mounts these applications under `/bin` as its initial VFS image:
 | **Drivers** | PS/2 keyboard (scan codes, shift/capslock) + mouse (3-byte packet parsing, signed/unsigned movement, screen bounds clamping), RTC, PCI enumeration, IDE ATA/ATAPI, Intel 82540EM Gigabit Ethernet |
 | **Network** | Intel 82540EM driver (bus-mastered RX/TX rings, IO-APIC interrupts) + IPv4/ARP/ICMP/TCP stack with checksums, HTTP service on port 80 (guest 10.0.0.64) |
 | **IPC** | Inter-process communication primitives |
-| **Font** | Canele bitmap font (6x12 px) glyph data in `kernel/library/font.asm`, dimensions in `kernel/library/font/header.asm` |
+| **Font** | JetBrains Mono bitmap font (6x12 px) glyph data in `kernel/library/font.asm`, dimensions in `kernel/library/font/header.asm` |
 | **Services** | Garbage collector (gc) + window manager (wm) + GUI compositor + network transmit/network/HTTP — started at boot |
 | **Color** | ARGB alpha blending (`library_color_alpha`) and alpha inversion (`library_color_alpha_invert`) |
 

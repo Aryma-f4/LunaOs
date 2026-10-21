@@ -140,7 +140,7 @@ MEMORY LAYOUT
 +--------------------+
 | library/           |  color.asm, input.asm, page_align_up.asm,
 |                    |  page_from_size.asm, string_*.asm,
-|                    |  font.asm + font/header.asm (Canele, 6x12px),
+|                    |  font.asm + font/header.asm (JetBrains Mono, 6x12px),
 |                    |  bosu.asm (+ data, header)
 +--------------------+
 kernel_end:

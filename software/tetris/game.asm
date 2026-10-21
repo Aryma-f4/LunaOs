@@ -82,7 +82,7 @@ tetris_spawn:
 
  ; freeze the game and say so in the title
  mov byte [tetris_game_over], 0x01
- mov ecx, 0x1B ; "Tetris - game over, press R" = 27 characters
+ mov ecx, 0x0E ; "Over - press R" = 14 characters
  mov rsi, tetris_string_game_over
  mov rdi, tetris_window
  macro_library LIBRARY_STRUCTURE_ENTRY.bosu_header_set
