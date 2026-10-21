@@ -5,174 +5,153 @@ Author: arfy slowy
 OVERVIEW
 Interrupt handler for IDT vector 0x40 (KERNEL_SERVICE) — the kernel's
 sole syscall gate. Dispatches based on AL (service class) then AX
-(function ID). Propagates error status back to the caller by modifying
-the carry (CF) and zero (ZF) flags in the iretq frame's saved EFLAGS.
+(function ID). Propagates error status back to the caller by copying
+the current flags (after an optional STC on the error path) into the
+interrupted frame's saved EFLAGS, so the caller can test CF/ZF right
+after INT 0x40.
 
-SERVICE IDS (from kernel/config.asm)
+SERVICE IDS (from kernel/header/service.asm)
 
 KERNEL_SERVICE                    equ 0x40   (interrupt vector)
 
 KERNEL_SERVICE_PROCESS            equ 0x0000
-  KERNEL_SERVICE_PROCESS_exit     equ 0x0000  (exit current task)
-  KERNEL_SERVICE_PROCESS_run      equ 0x0100  (exec a file)
-  KERNEL_SERVICE_PROCESS_check    equ 0x0200  (check PID exists)
-
-KERNEL_SERVICE_VIDEO              equ 0x0001
-  KERNEL_SERVICE_VIDEO_string     equ 0x0101  (print string)
-  KERNEL_SERVICE_VIDEO_cursor     equ 0x0201  (get cursor pos)
-  KERNEL_SERVICE_VIDEO_char       equ 0x0301  (print char)
-  KERNEL_SERVICE_VIDEO_clean      equ 0x0401  (clear screen)
-  KERNEL_SERVICE_VIDEO_properties equ 0x0501  (get video props)
-  KERNEL_SERVICE_VIDEO_number     equ 0x0601  (print number)
-  KERNEL_SERVICE_VIDEO_cursor_set equ 0x0701  (set cursor position)
-    Input: RBX = packed cursor position (x:low, y:high word)
-    Calls: kernel_video_cursor_set
-
-KERNEL_SERVICE_KEYBOARD           equ 0x0002
-  KERNEL_SERVICE_KEYBOARD_key     equ 0x0002  (read key)
+  KERNEL_SERVICE_PROCESS_exit              0x0000  (exit current task)
+  KERNEL_SERVICE_PROCESS_run               0x0100  (exec a program file)
+  KERNEL_SERVICE_PROCESS_check             0x0200  (check PID exists)
+  KERNEL_SERVICE_PROCESS_memory_alloc      0x0300  (allocate process memory)
+  KERNEL_SERVICE_PROCESS_ipc_receive       0x0400  (wait for IPC message)
+  KERNEL_SERVICE_PROCESS_pid               0x0500  (own PID)
+  KERNEL_SERVICE_PROCESS_ipc_send          0x0600  (send IPC message)
+  KERNEL_SERVICE_PROCESS_ipc_send_to_parent 0x0700 (send IPC to parent)
+  KERNEL_SERVICE_PROCESS_stream_out        0x0800  (set output pipe)
+  KERNEL_SERVICE_PROCESS_stream_in         0x0900  (set input pipe)
+  KERNEL_SERVICE_PROCESS_stream_out_char   0x0A00  (write char to pipe)
+  KERNEL_SERVICE_PROCESS_stream_meta       0x0B00  (get/set pipe metadata)
+  KERNEL_SERVICE_PROCESS_pid_parent        0x0C00  (parent PID)
+  KERNEL_SERVICE_PROCESS_list              0x0D00  (list of tasks)
+  KERNEL_SERVICE_PROCESS_memory_release    0x0E00  (release memory area)
+  KERNEL_SERVICE_PROCESS_sleep             0x0F00  (stop process for a time)
+  KERNEL_SERVICE_PROCESS_release           0x1000  (release remaining CPU time)
+  KERNEL_SERVICE_PROCESS_dir_change        0x1100  (change working directory)
+    RUN flags:          BL = stream behaviour (kernel_stream_set)
+    STREAM_META flags:  get/set, in/out
 
 KERNEL_SERVICE_VFS                equ 0x0003
-  KERNEL_SERVICE_VFS_exist        equ 0x0003  (check file exists)
-    Input: RSI = path string, RCX = path length
-    Output: CF=1 if not found, CF=0 if exists
-    Calls: kernel_vfs_path_resolve, kernel_vfs_file_find
-    Note: resolves from current working directory
+  KERNEL_SERVICE_VFS_exist                 0x0003  (check file exists)
+  KERNEL_SERVICE_VFS_touch                 0x0103  (create empty file)
+  KERNEL_SERVICE_VFS_dir                   0x0203  (list directory)
+  KERNEL_SERVICE_VFS_read                  0x0303  (load file into process memory)
+  KERNEL_SERVICE_VFS_write                 0x0403  (store data into file)
 
-KERNEL_SERVICE_SYSTEM             equ 0x0004
-  KERNEL_SERVICE_SYSTEM_memory    equ 0x0004  (get memory stats)
-    Output: R8 = total pages, R9 = free pages, R10 = paged count
-    No error possible
-    Note: previously returned paged count in R19, now in R10
+KERNEL_SERVICE_SYSTEM              equ 0x0004
+  KERNEL_SERVICE_SYSTEM_memory             0x0004  (RAM page statistics)
+  KERNEL_SERVICE_SYSTEM_time               0x0104  (microtime since boot)
 
-KERNEL_ERROR_PAGE_memory_low      equ 0x0001  (out of memory error code)
+NOTE: older docs described VIDEO (0x0001) and KEYBOARD syscall classes —
+they no longer exist; the only classes are PROCESS, VFS and SYSTEM.
+(kernel/video.asm and the PS/2 drivers are kernel-internal.)
 
-DISPATCH TREE
+DISPATCH TREE (kernel_service)
 
-kernel_service (int 0x40)
+kernel_service:
   |
-  +-- cmp al, KERNEL_SERVICE_PROCESS (0x00)
-  |     |
-  |     +-- .process:
-  |           |
-  |           +-- cmp ax, KERNEL_SERVICE_PROCESS_exit  (0x0000)
-  |           |     -> je  kernel_task_kill
-  |           |
-  |           +-- cmp ax, KERNEL_SERVICE_PROCESS_run   (0x0100)
-  |           |     -> je  .process_run
-  |           |           |   push rsi, rdi, rcx (save regs)
-  |           |           +-- call kernel_vfs_path_resolve
-  |           |           +-- jc  .process_run_error
-  |           |           +-- call kernel_vfs_file_find
-  |           |           +-- jc  .process_run_error
-  |           |           +-- call kernel_exec
-  |           |           +-- jnc .end
-  |           |           |
-  |           |           +-- .process_run_error:
-  |           |           |     mov [rsp], rax  (return error code)
-  |           |           |     jmp .end
-  |           |           |
-  |           +-- cmp ax, KERNEL_SERVICE_PROCESS_check (0x0200)
-  |           |     -> je  .process_check -> kernel_task_pid_check
-  |           |
-  |           +-- else -> jmp .error (stc)
+  +-- cmp al, KERNEL_SERVICE_PROCESS (0x00) -> .process
+  |     cmp ax per function from _exit -> kernel_task_kill
+  |     through _dir_change; unknown -> kernel_service.error
   |
-  +-- cmp al, KERNEL_SERVICE_VIDEO (0x01)
-  |     |
-  |     +-- .video:
-  |           |
-  |           +-- cmp ax, KERNEL_SERVICE_VIDEO_string (0x0101)
-  |           |     -> je  .video_string -> kernel_video_string
-  |           |
-  |           +-- cmp ax, KERNEL_SERVICE_VIDEO_cursor (0x0201)
-  |           |     -> je  .video_cursor -> mov rbx, [kernel_video_cursor]
-  |           |
-  |           +-- cmp ax, KERNEL_SERVICE_VIDEO_char (0x0301)
-  |           |     -> je  .video_char -> kernel_video_char(dx)
-  |           |
-  |           +-- cmp ax, KERNEL_SERVICE_VIDEO_clean (0x0401)
-  |           |     -> je  .video_clean -> kernel_video_drain
-  |           |
-  |           +-- cmp ax, KERNEL_SERVICE_VIDEO_number (0x0601)
-  |           |     -> je  .video_number -> kernel_video_number(r8, bx, cx)
-  |           |
-  |           +-- else -> jmp .error (stc)
+  +-- cmp al, KERNEL_SERVICE_VFS (0x03) -> .vfs
+  |     +-- cmp ax, KERNEL_SERVICE_VFS_exist -> .vfs_exist
+  |     +-- cmp ax, KERNEL_SERVICE_VFS_touch -> .vfs_touch
+  |     +-- cmp ax, KERNEL_SERVICE_VFS_dir   -> .vfs_dir
+  |     +-- cmp ax, KERNEL_SERVICE_VFS_read  -> .vfs_read
+  |     +-- cmp ax, KERNEL_SERVICE_VFS_write -> .vfs_write
+  |     +-- else -> kernel_service.error
   |
-  +-- cmp al, KERNEL_SERVICE_KEYBOARD (0x02)
-  |     |
-  |     +-- .keyboard:
-  |           |
-  |           +-- cmp ax, KERNEL_SERVICE_KEYBOARD_key (0x0002)
-  |                 -> je  .keyboard_key
-  |                       |
-  |                       +-- call driver_ps2_keyboard_read
-  |                       +-- mov [rsp], ax  (return key code)
-  |                       +-- jmp .end
-  |                 -> else jmp .error (stc)
+  +-- cmp al, KERNEL_SERVICE_SYSTEM (0x04) -> .system
+  |     +-- cmp ax, KERNEL_SERVICE_SYSTEM_memory -> .system_memory
+  |     +-- cmp ax, KERNEL_SERVICE_SYSTEM_time   -> .system_time
+  |     +-- else -> kernel_service.error
   |
-  +-- else -> .error (stc)
+  +-- else -> kernel_service.error
 
 FLAG PROPAGATION (via iretq EFLAGS)
 
-kernel_service does not return via ret — it returns via iretq.
-To report success/failure, it modifies the saved EFLAGS on the
-interrupt stack before iretq pops them:
+Returns through iretq, not ret. The live flags (CF set on the error
+path) are pushed/popped and written into the interrupted frame's
+saved EFLAGS slot; the original rax/rbp are restored first:
 
-  .error:                    ; called for unknown service IDs
-    stc                      ; set carry flag
-
-  .end:
-    pushf                    ; push current flags (with CF state)
-    pop rax                  ; pop into rax
-    and ax, CF | ZF          ; keep only CF and ZF bits
-    and word [rsp+XXX], ~CF  ; clear CF in saved EFLAGS
-    and word [rsp+XXX], ~ZF  ; clear ZF in saved EFLAGS
-    or  word [rsp+XXX], ax   ; set CF/ZF from rax
-    pop rax                  ; restore original rax
-    iretq                    ; return to user with CF/ZF set
+  kernel_service.error:
+    stc                        ; unknown service or failed operation
+  kernel_service.end:
+    pushf
+    pop rax
+    mov [rsp + KERNEL_TASK_STRUCTURE_IRETQ.eflags + STATIC_QWORD_SIZE_byte * 0x02], rax
+    pop rax                    ; restore original rax
+    pop rbp                    ; restore original rbp
+    iretq                      ; return with updated CF/ZF
 
 The caller sees:
   - On success: CF=0 (jnc/jc check)
   - On error/unknown: CF=1 (stc)
-  - For PROCESS_run errors: RAX = error code (e.g. KERNEL_ERROR_PAGE_memory_low)
-  - .video_cursor returns cursor position in RBX (not via flags)
-  - .keyboard_key returns key scancode in AX on the stack
+  - PROCESS_run returns the new PID in RCX
+  - SYSTEM_memory returns pages in R8 (total), R9 (free), R10 (used)
+  - SYSTEM_time returns microtime ticks in RAX (1024 ticks per second)
 
 CALLING CONVENTIONS PER FUNCTION
 
 KERNEL_SERVICE_PROCESS_exit:
-  Destroys the current task. Does not return.
+  Destroys the current task. Calls kernel_task_kill.
 
 KERNEL_SERVICE_PROCESS_run:
-  Input: RSI = path string, RCX = path length
-  Output: CF=0 on success (new task created, PID in RCX), CF=1 on error,
-          RAX = error code
-  Calls: kernel_vfs_path_resolve, kernel_vfs_file_find, kernel_exec
-  Error: propagates error code from kernel_exec via .process_run_error
-  Note: pushes rsi/rdi/rcx on entry, restores them before return
-        (so caller's regs are preserved except on error path)
+  Input:  BL = stream behaviour, RCX = path length, RSI = path string
+          (together with the arguments), R8 = size of the arguments
+  Output: RCX = PID of the started process
+  Calls: kernel_vfs_path_resolve, kernel_vfs_file_find, kernel_exec,
+         kernel_stream_set; marks the new task active
 
 KERNEL_SERVICE_PROCESS_check:
-  Input: ECX = PID to check
-  Output: CF=0 if PID exists and not closed, CF=1 if not found or closed
+  Input:  ECX = PID to check
+  Output: CF=0 if the PID exists and is not closed
   Calls: kernel_task_pid_check
 
-KERNEL_SERVICE_VIDEO_string:
-  Input: RSI = string pointer, ECX = string length (cloberred to 0)
-  Output: CF=0
+KERNEL_SERVICE_PROCESS_memory_alloc:
+  Input:  RCX = size of the area in Bytes
+  Output: RDI = pointer to the allocated area, CF=1 if out of memory
+  Calls: library_page_from_size, kernel_memory_alloc_task
 
-KERNEL_SERVICE_VIDEO_cursor:
-  Output: RBX = current cursor position (byte offset in framebuffer)
+KERNEL_SERVICE_SYSTEM_memory:
+  Output: R8 = total pages, R9 = free pages, R10 = allocated pages
 
-KERNEL_SERVICE_VIDEO_char:
-  Input: DX = character to print (AX = DX before call)
+KERNEL_SERVICE_SYSTEM_time:
+  Output: RAX = microtime since boot (driver_rtc_microtime)
 
-KERNEL_SERVICE_VIDEO_clean:
-  Clears framebuffer and resets cursor. Calls kernel_video_drain.
+KERNEL_SERVICE_VFS_exist:
+  Input:  RSI = path string, RCX = path length
+  Output: CF=0 if the file exists, RAX = VFS error code (0 = none)
+  Calls: kernel_vfs_path_resolve, kernel_vfs_file_find
 
-KERNEL_SERVICE_VIDEO_number:
-  Input: R8 = value, RBX = base (2-36), ECX = min digits
-  Calls: kernel_video_number
+KERNEL_SERVICE_VFS_touch:
+  Input:  RSI = path string, RCX = path length
+  Output: CF=0 on success
+  Calls: kernel_vfs_path_resolve, kernel_vfs_file_touch (type regular)
 
-KERNEL_SERVICE_KEYBOARD_key:
-  Output: AX = scancode of next key from keyboard buffer
-  Blocking: waits for a key if buffer is empty (driver_ps2_keyboard_read)
+KERNEL_SERVICE_VFS_dir:
+  Input:  RSI = path string, RCX = path length
+  Output: RCX = number of entries, RDI = pointer to the entries,
+          CF=1 on error
+  Calls: kernel_vfs_path_resolve, kernel_vfs_file_find,
+         kernel_memory_alloc_task
+
+KERNEL_SERVICE_VFS_read:
+  Input:  RSI = path string, RCX = path length
+  Output: RCX = size in Bytes, RDI = pointer to the data (allocated in
+          the process' memory), CF=1 on error
+  Calls: kernel_vfs_path_resolve, kernel_vfs_file_find,
+         kernel_memory_alloc_task, kernel_vfs_file_read
+
+KERNEL_SERVICE_VFS_write:
+  Input:  RSI = path string, RCX = path length, RDI = data pointer,
+          RDX = data size in Bytes
+  Output: CF=0 on success; creates the file if it does not exist
+  Calls: kernel_vfs_path_resolve, kernel_vfs_file_find,
+         kernel_vfs_file_touch, kernel_vfs_file_write

@@ -36,7 +36,7 @@ atomicity across all cores.
 CALLERS
   kernel_ipc_semaphore     in kernel/ipc.asm
   kernel_memory_lock_semaphore  in kernel/memory.asm
-  kernel_video_semaphore   in kernel/video.asm
+  kernel_wm_object_semaphore in kernel/service/wm/data.asm
   kernel_task_pid_semaphore in kernel/task.asm
   kernel_vfs_semaphore     in kernel/vfs.asm
   service_network_port_semaphore in kernel/service/network/tcp.asm

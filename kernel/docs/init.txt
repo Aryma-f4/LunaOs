@@ -15,74 +15,69 @@ SMP Boot Check (top of init.asm):
      STATIC_TRUE  -> AP path, include ap.asm (application processor init)
      Falls through to .entry to continue boot
 
-32-bit Pre-Initialization (before [BITS 64]):
-  2. kernel/init/long_mode.asm
-     Set up 64-bit long mode (GDT, paging, etc.)
-     Switches CPU from 32-bit to 64-bit mode
+Definitions included before kernel_init (data + APIC procedure):
+  2. kernel/init/data.asm
+     Init variables and strings: services list, VFS directory/file tables,
+     embedded application binaries, kernel_init_boot_file (SMP trampoline),
+     kernel_init_ap_semaphore for AP synchronization
 
-  3. kernel/init/panic.asm
-     Initialize panic handler for early errors
-
-   4. kernel/init/data.asm
-      Initialize data structures and strings
-      Contains kernel_init_boot_file (incbin of boot.asm trampoline)
-      Contains kernel_init_ap_semaphore for AP synchronization
-
-   5. kernel/init/multiboot.asm
-     Process Multiboot information from bootloader
-
-[BITS 64] Transition:
-  6. kernel/init/apic.asm
-     Early APIC detection (before full init)
-     Must run after 64-bit mode is enabled
+  3. kernel/init/apic.asm
+     kernel_init_apic procedure — Local APIC configuration (flat mode,
+     spurious vector, LVT timer); called inline after services.asm,
+     before smp.asm
 
 64-bit Initialization (kernel_init):
-  7. kernel/init/video.asm
-      Initialize video output and display welcome + resolution
-      Displays: "Welcome to Luna OS! (v1.90 x86_64)" then ":: Video resolution at WxH"
-      Calls: kernel_video_drain, kernel_video_string, kernel_video_number
+  4. kernel/init/serial.asm
+     Initialize serial port COM1 as stdlog (115200 baud, 8N1, FIFO enabled)
+     Calls: driver_serial
 
-  8. kernel/init/font.asm
-      Display font name used by the kernel
-      Displays: ":: Font: <font_name>"
-      Calls: kernel_video_string
+  5. kernel/init/video.asm
+     Store framebuffer info from the bootloader's VESA mode block
+     Output: kernel_video_base_address, width/height (pixels),
+             kernel_video_size_byte, kernel_video_scanline_byte
 
-  9. kernel/init/memory.asm
-      Parse Multiboot memory map and initialize memory manager
-      After bitmap setup, displays available RAM
-      Displays: ":: Available <size> KiB of RAM memory."
-      Uses: Multiboot info structure from bootloader
-      Output: kernel_memory_map_address, page bitmap
+  6. kernel/init/memory.asm
+     Parse the binary memory map and initialize the page bitmap
+     Uses: memory map array passed by the bootloader
+     Output: kernel_memory_map_address, page bitmap
+     Error: kernel_init_string_error_memory -> kernel_panic
 
-  10. kernel/init/acpi.asm
+  7. kernel/init/stream.asm
+     Create the pipe table and default output pipe
+     Output: kernel_stream_address, kernel_stream_out_default (stdout/stderr/stdlog)
+
+  8. kernel/init/acpi.asm
      Initialize ACPI and enumerate CPUs
      Finds: RSDP, RSDT, MADT
      Output: kernel_apic_base_address, kernel_apic_count, IO-APIC info
 
-  11. kernel/init/page.asm
-      Set up paging and virtual memory mappings
-      Allocates: PML4 table
-      Maps: kernel, stack, video memory, APIC registers
-      Maps: boot trampoline at 0x8000 for SMP AP wake
+  9. kernel/init/page.asm
+     Set up paging and virtual memory mappings
+     Allocates: PML4 table
+     Maps: kernel RAM 1:1 from KERNEL_BASE_address, kernel stack,
+           video memory, APIC + IO-APIC registers
 
-  12. kernel/init/gdt.asm
+  10. kernel/init/library.asm
+      Share the libraries with all processes
+
+  11. kernel/init/gdt.asm
      Initialize Global Descriptor Table
      Sets up: null, CS, DS, TSS descriptors
      Loads: GDT and task register
 
-  13. kernel/init/idt.asm
+  12. kernel/init/idt.asm
       Initialize Interrupt Descriptor Table
       Sets up: exception handlers (0-31), syscall gate (vector 0x40 -> kernel_service),
                spurious handler (vector 0xFF)
       Loads: IDT via LIDT
 
-  14. kernel/init/rtc.asm
+  13. kernel/init/rtc.asm
       Initialize Real Time Clock
       Configures: 1024Hz periodic interrupts
       Connects: IRQ 8 to IO-APIC
-      Enables interrupts (sti) — moved from init.asm
+      Enables interrupts (sti)
 
-   15. kernel/init/ps2.asm
+   14. kernel/init/ps2.asm
       Initialize PS/2 mouse and keyboard
       Mouse init (before keyboard):
         1. Drain stale data from controller
@@ -95,19 +90,20 @@ SMP Boot Check (top of init.asm):
       Keyboard init (after mouse):
         6. Mount IRQ 1 handler (driver_ps2_keyboard) to IDT + IO-APIC
 
-  16. kernel/init/ipc.asm
+  15. kernel/init/ipc.asm
       Initialize IPC message pool
       Allocates: IPC pool page
       Must run before VFS, network and task init
 
-  17. kernel/init/vfs.asm
+  16. kernel/init/vfs.asm
       Initialize Virtual File System
-      Allocates: VFS magicknot structure
-      Creates: root directories (kernel_init_vfs_directory_structure: /bin, /dev)
-      Preloads: /bin/init, /bin/shell, /bin/wello, /bin/free (from software/*.asm)
+      Allocates: root directory page (pointer saved in kernel_vfs_magicknot .data)
+      Creates: root directories (kernel_init_vfs_directory_structure: /bin, /etc, /dev, /var)
+      Preloads: 12 applications (shell, hello, tm, console, ls, cat, lulu, glaze,
+                redia, calculator, tetris, fetch) + /etc/hostname + /var/welcome.txt
       Runs after IPC, before network
 
-  18. kernel/init/storage.asm
+  17. kernel/init/storage.asm
       Initialize storage subsystem
       Scans PCI for IDE controller (class 0x0101)
       Calls driver_ide_init: resets both IDE channels (SRST),
@@ -115,45 +111,47 @@ SMP Boot Check (top of init.asm):
       detects LBA48 support, populates driver_ide_devices table
       Creates: VFS block device knots for each detected drive
       Stores: byte size in knot (sectors * 512)
-      Displays: ":: IDE storage devices:" then "/dev/hd{a-d}" with KiB size
       Runs after VFS, before network
 
-  19. kernel/init/network.asm
+  18. kernel/init/network.asm
        Detect and initialize NIC hardware
        Scans PCI for network class, matches i82540EM vendor/device
        Allocates: port table page, stack address page
        Calls: driver_pci_find_class_and_subclass, driver_nic_i82540em
 
-  20. kernel/init/task.asm
+  19. kernel/init/task.asm
        Initialize tasking system
-       Creates: first kernel task
-       Mounts: timer interrupt handler (IRQ 0)
+       Creates: the task queue, active task list and the first (kernel) task
+       Mounts: kernel_task handler on the APIC timer interrupt (vector 0x20)
 
-   21. kernel/init/services.asm
-         Start kernel services — tresher, desu, and workbench at boot (tx, network, HTTP removed)
+   20. kernel/init/services.asm
+         Start kernel services in list order — garbage collector, window manager,
+         GUI, network transmit, network service, HTTP service
 
-   22. kernel/init/serial.asm
-        Initialize serial port COM1 (115200 baud, 8N1, FIFO enabled)
-        Calls: driver_serial
+   (inline) call kernel_init_apic — set TICR = DRIVER_RTC_Hz, send EOI
 
-   23. kernel/init/smp.asm
-      Copy boot trampoline (boot.asm) to 0x8000
+   21. kernel/init/smp.asm
+      Map and copy boot trampoline (kernel/init/boot.asm) to 0x7000
       Set kernel_init_smp_semaphore to STATIC_TRUE
       Send INIT IPI to all APs (ICR = 0x00004500)
       Wait 10ms for APs to complete INIT
-      Send STARTUP IPI with vector 0x08 to each AP (ICR = 0x00004608)
-      APs start at boot.asm (16-bit real mode -> 32-bit -> kernel)
-      Note: sti moved to init/rtc.asm (step 14), removed from init.asm
+      Send STARTUP IPI with vector 0x07 to each AP (ICR = 0x00004607)
+      APs start at 0x7000: boot.asm 16-bit -> 32-bit -> 64-bit, then
+      jmp 0x100000 (kernel entry falls into ap.asm)
+      Note: sti moved to init/rtc.asm (step 13), removed from init.asm
 
-AP boot path (ap.asm):
-  - Reload GDT, enable PAE, load PML4
+AP boot path (boot.asm -> kernel entry -> ap.asm):
+  boot.asm (copied to 0x7000 as kernel_init_boot_file):
+  - Enter 32-bit protected mode, enable PAE, load boot PML4
   - Enable long mode (EFER.LME), enable paging
-  - Far jump to 64-bit mode
-  - Configure LAPIC: task priority, get APIC ID
+  - Far jump to 64-bit mode, jmp 0x100000 (kernel entry;
+    kernel_init_smp_semaphore is set -> falls into ap.asm)
+  ap.asm:
+  - Reload kernel GDT, set LAPIC task priority, get APIC ID
   - Calculate and load per-CPU TSS selector
   - Load IDT
   - Wait on kernel_init_ap_semaphore
-  - Allocate and map stack page via kernel_page_map_logical
+  - Allocate AP PML4 page and stack via kernel_page_map_logical
   - Merge page tables with BSP via kernel_page_merge
   - Load merged CR3, set stack pointer
   - Release semaphore, call kernel_init_apic
@@ -166,17 +164,17 @@ Final Steps (after all init modules):
   - Set APIC TICR register to DRIVER_RTC_Hz (1024Hz timer)
   - Send EOI to clear any pending interrupt
   - smp.asm -> wake application processors
-  Note: sti was moved from here to init/rtc.asm (step 14)
+  Note: sti was moved from here to init/rtc.asm (step 13)
   - Wait for all APs: re-read kernel_init_ap_count on each
     iteration, compare against kernel_apic_count
-   - Set kernel_init_semaphore to STATIC_FALSE (signals services to start)
+   - Set kernel_init_semaphore to STATIC_FALSE (init complete)
    - Jump to clean: (in kernel.asm) — releases init code pages via kernel_memory_release,
      then enters idle loop (kernel_task_active + jmp $)
 
 INITIALIZATION FLOW
 
    +-------------------------+
-   | 32-bit Entry            |
+   | kernel entry (64-bit)   |
    +-----------+-------------+
                |
                v
@@ -195,22 +193,9 @@ INITIALIZATION FLOW
                  |
                  v
    +-------------------------+
-   | long_mode.asm           |
-   | Enable 64-bit mode      |
+   | data.asm, apic.asm      |
+   | (init data + APIC proc) |
    +-----------+-------------+
-              |
-              v
-  +-------------------------+
-  | panic.asm, data.asm,    |
-  | multiboot.asm           |
-  | (32-bit setup)          |
-  +-----------+-------------+
-              |
-              v
-  +-------------------------+
-  | [BITS 64]               |
-  | apic.asm (early detect) |
-  +-----------+-------------+
               |
               v
   +---------------+
@@ -219,23 +204,28 @@ INITIALIZATION FLOW
            |
            v
    +-------------------------+
-   | video.asm               |
-   | (banner + resolution)   |
+   | serial.asm (COM1 stdlog)|
    +-----------+-------------+
                |
                v
    +-------------------------+
-   | font.asm                |
-   | (font name display)     |
+   | video.asm               |
+   | (store framebuffer info)|
    +-----------+-------------+
                |
                v
    +-------------------------+
    | memory.asm              |
-   | (bitmap + RAM display)  |
+   | (memory map + bitmap)   |
    +-----------+-------------+
               |
               v
+   +-------------------------+
+   | stream.asm              |
+   | (pipe table + stdout)   |
+   +-----------+-------------+
+               |
+               v
   +-------------------------+
   | acpi.asm                |
   +-----------+-------------+
@@ -246,6 +236,12 @@ INITIALIZATION FLOW
   +-----------+-------------+
               |
               v
+   +-------------------------+
+   | library.asm             |
+   | (share libraries)       |
+   +-----------+-------------+
+               |
+               v
   +-------------------------+
   | gdt.asm                 |
   +-----------+-------------+
@@ -279,9 +275,9 @@ INITIALIZATION FLOW
              v
  +-------------------------+
  | vfs.asm                 |
- | (/bin, /dev created)    |
- | (/bin/init, /bin/shell, |
- |  /bin/wello, /bin/free) |
+ | (/bin,/etc,/dev,/var)   |
+ | 12 apps + hostname +    |
+ | welcome.txt preloaded   |
  +-----------+-------------+
              |
              v
@@ -304,13 +300,8 @@ INITIALIZATION FLOW
              v
    +-------------------------+
    | services.asm            |
-   | (tresher, desu)         |
-   +-----------+-------------+
-               |
-               v
-   +-------------------------+
-   | serial.asm              |
-   | (COM1 init)             |
+   | (gc, wm, gui, tx,       |
+   |  network, http)         |
    +-----------+-------------+
                |
                v
@@ -319,7 +310,7 @@ INITIALIZATION FLOW
    | kernel_init_apic        |
  | Set TICR = DRIVER_RTC_Hz|
  | Send EOI                |
- | (sti now in rtc.asm)   |
+ | (sti now in rtc.asm)    |
  +-----------+-------------+
               |
               v
@@ -327,7 +318,7 @@ INITIALIZATION FLOW
    | smp.asm                 |
    | Send INIT IPI (all APs) |
    | Wait 10ms               |
-   | Send STARTUP IPI (vec 8)|
+   | Send STARTUP IPI (vec 7)|
    | APs boot via boot.asm   |
    +-----------+-------------+
               |
@@ -359,4 +350,5 @@ INITIALIZATION FLOW
      +-------------------------+
 
 ERROR HANDLING
-Each init module checks for errors and calls kernel_init_panic_* on failure.
+Each init module checks for errors and calls kernel_panic /
+kernel_panic_memory on failure.

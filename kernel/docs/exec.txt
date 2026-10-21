@@ -5,53 +5,51 @@ Author: arfy slowy
 OVERVIEW
 Loads and executes a flat binary userspace process from a VFS file
 knot. Creates an isolated address space using a dedicated PML4 table
-with ring-3 accessible code and ring-0-only stack. Sets up an iretq
-frame on the parent task's stack for ring-3 return. Propagates errors
-from page operations back to the caller via RAX + carry flag.
+with ring-3 accessible code and a ring-0-only kernel context stack.
+Sets up an iretq frame on the parent task's context stack for ring-3
+return. Propagates errors from page operations back to the caller via
+the carry flag.
 
 PROCEDURE FLOW
 
-kernel_exec(RDI=vfs_knot, R8=parent_task)
+kernel_exec(RCX=name length, RSI=name+args, RDI=VFS knot, R8=args size)
 
 +-------+-------------------------------------------------------------+
 | Step  | Operation                                                   |
 +-------+-------------------------------------------------------------+
-|  1    | rcx = file_size -> call library_page_from_size              |
-|  2    | rcx += 14 -> call kernel_page_secure                        |
-|      |              jc .error   (out of memory)                     |
-|  3    | call kernel_memory_alloc_page  (new PML4 page)              |
-|  4    | call kernel_page_drain         (zero it out)                |
-|  5    | inc qword [kernel_page_paged_count]  (track allocation)     |
-|  6    | Save PML4 ptr in r11                                        |
-|  7    | Map code at KERNEL_MEMORY_HIGH_VIRTUAL                      |
-|      |   call kernel_page_map_logical -> jc .error                  |
-|  8    | Map code+1 page at (HIGH_VIRTUAL << 1) - PAGE_SIZE          |
-|      |   call kernel_page_map_logical -> jc .error                  |
-|  9    | Map stack at KERNEL_STACK_address                           |
-|      |   call kernel_page_map_logical -> jc .error                  |
-| 10    | Merge new PML4 with kernel mappings (kernel_page_merge)      |
-| 11    | Build iretq frame on parent task stack:                      |
-|       |    [RIP]   = KERNEL_MEMORY_HIGH_REAL_address (+0x00)        |
-|       |    [CS]    = GDT.cs_ring3 | 0x03                 (+0x08)    |
-|       |    [RFLAGS]= KERNEL_TASK_EFLAGS_default          (+0x10)    |
-|       |    [RSP]   = 0                                    (+0x18)    |
-|       |    [SS]    = GDT.ds_ring3 | 0x03                 (+0x20)    |
-| 12    | Switch to new cr3 (r11)                                     |
-| 13    | Read VFS file into SOFTWARE_base_address                    |
-| 14    | Restore original cr3                                        |
-| 15    | call kernel_task_add(flags, name_len=ECX, name=RSI)         |
-|       |   (name length and ptr come from VFS knot knot.length/knot.name)
-|      |   jc .error   (task table full)                             |
-| 16    | Release secured pages (free += rbp, reserved -= rbp)        |
-| 17    | Return PID in rcx via stack slot                            |
-| 18    | On error: RAX = error code, CF = 1                          |
+|  1    | rcx = knot.size -> library_page_from_size (r12 = code size) |
+|  2    | args size <= 1 page, else error (KERNEL_ERROR_memory_low)    |
+|  3    | rcx += 15 -> kernel_page_secure (reserve physical pages)    |
+|  4    | kernel_memory_alloc_page + kernel_page_drain (new PML4, r11)|
+|  5    | Map the code area at SOFTWARE_BASE_address (user-accessible)|
+|  6    | Map the process binary memory map behind the code           |
+|      |   (kernel-only), clear it and mark the taken pages          |
+|      |   (kernel_memory_secure; r13 = map address)                 |
+|  7    | Map the process stack at KERNEL_TASK_STACK_address          |
+|      |   (1 page, user), copy the arguments to its top (r14 = RSP)|
+|  8    | Map the kernel context stack at                             |
+|      |   SOFTWARE_BASE_address - 8 KiB (2 pages, kernel-only)      |
+|  9    | kernel_page_merge — copy the kernel PML4 entries            |
+| 10    | Build the iretq frame on the parent task context stack:     |
+|       |    [RIP]   = SOFTWARE_BASE_address                  (+0x00)|
+|       |    [CS]    = KERNEL_STRUCTURE_GDT.cs_ring3 | 0x03    (+0x08)|
+|       |    [RFLAGS]= KERNEL_TASK_EFLAGS_default             (+0x10)|
+|       |    [RSP]   = r14 (process stack top)               (+0x18)|
+|       |    [SS]    = KERNEL_STRUCTURE_GDT.ds_ring3 | 0x03    (+0x20)|
+| 11    | Switch CR3, kernel_vfs_file_read into SOFTWARE_BASE_address,|
+|       |   restore CR3                                               |
+| 12    | kernel_task_add (name from the knot, rbx = task stack)       |
+| 13    | Record task memory size and binary memory map pointer        |
+| 14    | Release the unused reserved pages                           |
+| 15    | Return: RCX = PID, RDI = task structure pointer             |
 +-------+-------------------------------------------------------------+
 
 REGISTER SAVE ORDER (push/pop)
-  push: rbx, rdx, rsi, rbp, r8, r11, rax, rcx, rdi
-  pop:  rdi, rcx, rax, r11, r8, rbp, rsi, rdx, rbx
-  Note: rax pushed last (first restore slot) — error code stored
-        at [rsp + 2*QWORD] for caller retrieval.
+  push: rdx, rsi, rbp, r8, r11, r12, r13, r14, rax, rbx, rcx, rdi
+  pop:  rdi, rcx, rbx, rax, r14, r13, r12, r11, r8, rbp, rsi, rdx
+  Note: results are returned by overwriting the saved slots before the
+        pops (PID -> rcx slot, task pointer -> rdi slot, error -> deeper
+        preserved slot).
 
 PAGE TABLE HIERARCHY (4-level paging)
 
@@ -76,55 +74,60 @@ PAGE TABLE HIERARCHY (4-level paging)
 
 PROCESS VIRTUAL ADDRESS SPACE
 
-0xFFFF800000000000  KERNEL_MEMORY_HIGH_REAL_address (= SOFTWARE_base_address)
+0x0000700000000000  SOFTWARE_STACK_pointer
 +------------------------------------------+
-| Userspace code (from VFS file)  [RW]     |  ring-3 accessible
+| Process stack (1 page, args at top) [U]  |  ring-3 RSP starts here
 +------------------------------------------+
-| Extra code page (HIGH_VIRTUAL << 1)-PAGE  |  [RW]
+0x0000100000001000  (behind the code area)
+| Process binary memory map      [kernel]  |  1 page, not user-accessible
 +------------------------------------------+
-| ...                                       |
-+------------------------------------------+
-| Kernel stack (KERNEL_STACK_address) [RW]  |  ring-0 only
+0x0000100000000000  SOFTWARE_BASE_address
+| Userspace code (from VFS file)   [U RW]  |  ring-3, RIP starts here
 +------------------------------------------+
 
-Note: The new PML4 is merged with the kernel's existing PML4 via
-kernel_page_merge, so the new process sees kernel mappings in the
-high half while having its own low-half mappings.
+0x00000FFFFFFFE000  SOFTWARE_BASE_address - 8 KiB
++------------------------------------------+
+| Kernel context stack (2 pages) [kernel]  |  ring-0 only
++------------------------------------------+
 
-IRETQ FRAME LAYOUT (on parent task stack)
+Note: the new PML4 is merged with the kernel's via kernel_page_merge,
+so the process sees the kernel mappings alongside its own.
 
-+0x00: RIP  = KERNEL_MEMORY_HIGH_REAL_address
-+0x08: CS   = KERNEL_STRUCTURE_GDT.cs_ring3 | 0x03
-+0x10: RFLAGS = KERNEL_TASK_EFLAGS_default
-+0x18: RSP  = 0x0000000000000000
-+0x20: SS   = KERNEL_STRUCTURE_GDT.ds_ring3 | 0x03
+IRETQ FRAME LAYOUT (on the parent task's context stack)
+
++0x00: RIP     = SOFTWARE_BASE_address
++0x08: CS      = KERNEL_STRUCTURE_GDT.cs_ring3 | 0x03
++0x10: RFLAGS  = KERNEL_TASK_EFLAGS_default
++0x18: RSP     = process stack top (arguments, then their size)
++0x20: SS      = KERNEL_STRUCTURE_GDT.ds_ring3 | 0x03
 
 When the scheduler switches to this task and iretq executes, the CPU
-will pop these values, entering ring-3 with CS/RPL=3, SS/RPL=3, and
-start executing at SOFTWARE_base_address with stack at 0.
+pops these values, entering ring-3 with CS/RPL=3, SS/RPL=3, and starts
+executing at SOFTWARE_BASE_address.
 
 CALLING CONVENTION
 
 Inputs:
-  RDI - Pointer to VFS knot (struct KERNEL_VFS_STRUCTURE_KNOT)
-        of the executable file to load (must be regular file type)
-  R8  - Pointer to parent task structure whose stack page is used
-        to build the iretq frame (reads qword [r8], page-aligns,
-        adds PAGE_SIZE - 5*qwords for frame)
+  RCX - Number of characters in the program name
+  RSI - Pointer to the program name together with the arguments
+  RDI - Pointer to the VFS knot of the file to load (regular file)
+  R8  - Size of the arguments in Bytes (maximum one page)
 
 Outputs:
+  CF  = 1 on error (only error: KERNEL_ERROR_memory_low = 0x0001,
+        defined in kernel/config.asm)
   RCX - PID of the newly created process, or 0 on failure
-  RAX - Error code (on CF=1): KERNEL_ERROR_PAGE_memory_low or 0
+  RDI - Pointer to the task structure, or 0 on failure
 
 Error handling: every critical call (page_secure, page_map_logical,
-task_add) is followed by `jc .error` to propagate failures.
-On error, RAX is stored at [rsp + 2*QWORD] for the caller.
+vfs_file_read, task_add) is followed by `jc .error`.
 
 Dependencies:
   library_page_from_size    - Convert byte size to page count
   kernel_page_secure        - Reserve physical pages
   kernel_memory_alloc_page  - Allocate a zeroed PML4 page
   kernel_page_drain         - Zero a page (after allocation)
+  kernel_memory_secure      - Mark pages as used in a binary memory map
   kernel_page_map_logical   - Map a virtual address range
   kernel_page_merge         - Copy kernel PML4 entries into new table
   kernel_vfs_file_read      - Read file contents into memory
