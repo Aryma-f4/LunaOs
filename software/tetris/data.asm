@@ -117,7 +117,7 @@ tetris_cell_color:
 tetris_score_table dq 40, 100, 300, 1200 ; points per lines cleared x (level + 1)
 
 tetris_string_title db "Tetris"
-tetris_string_game_over db "Tetris - game over, press R"
+tetris_string_game_over db "Over - press R"
 tetris_string_score db "SCORE "
 tetris_string_lines db "LINES "
 tetris_string_level db "LEVEL "
