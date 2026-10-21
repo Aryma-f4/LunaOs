@@ -3,131 +3,164 @@ File: config.asm
 Author: arfy slowy
 
 OVERVIEW
-Global constants and macros used throughout the kernel. This file defines fundamental sizes, shifts, masks, and ASCII constants.
+Global constants and macros used throughout the kernel. This file defines
+fundamental sizes, shifts, masks, scancode constants, terminal escape
+sequences, booleans, and the Everblush color palette.
 
 PAGE CONSTANTS
-  KERNEL_PAGE_mask        = 0xF000 (page mask for 32-bit addressing)
-  KERNEL_PAGE_SIZE_byte  = 0x1000 (4096 bytes = 4KB)
-  KERNEL_PAGE_SIZE_shift = 12 (2^12 = 4096)
+  STATIC_PAGE_mask        = 0xF000 (page mask for 32-bit addressing)
+  STATIC_PAGE_SIZE_byte   = 0x1000 (4096 bytes = 4KB)
+  STATIC_PAGE_SIZE_shift  = 12 (2^12 = 4096)
+
+SOFTWARE CONSTANTS
+  SOFTWARE_BASE_address   = 0x0000100000000000 (userspace code base)
+  SOFTWARE_STACK_pointer  = 0x0000700000000000 (top of userspace stack)
+  SOFTWARE_STACK_limit    = 1 page
 
 SHIFT CONSTANTS (multiply by powers of 2)
-  STATIC_MULTIPLE_BY_2_shift      = 1 (x2)
-  STATIC_MULTIPLE_BY_8_shift      = 3 (x8)
-  STATIC_MULTIPLE_BY_QWORD_shift  = 3 (x8, alias)
-  STATIC_MULTIPLE_BY_16_shift     = 4 (x16)
-  STATIC_MULTIPLE_BY_32_shift     = 5 (x32)
-  STATIC_MULTIPLE_BY_64_shift     = 6 (x64)
-  STATIC_MULTIPLE_BY_PAGE_shift  = 12 (x4096)
-  
-  STATIC_DIVIDE_BY_2_shift        = 1 (/2)
-  STATIC_DIVIDE_BY_4_shift        = 2 (/4)
-  STATIC_DIVIDE_BY_8_shift        = 3 (/8)
-  STATIC_DIVIDE_BY_DWORD_shift    = 2 (/4, alias of STATIC_DIVIDE_BY_4_shift)
-  STATIC_DIVIDE_BY_PAGE_shift     = 12 (/4096)
-  STATIC_DIVIDE_BY_256_shift      = 8 (/256)
+  STATIC_MULTIPLE_BY_2_shift        = 1  (x2)
+  STATIC_MULTIPLE_BY_4_shift        = 2  (x4)
+  STATIC_MULTIPLE_BY_8_shift        = 3  (x8)
+  STATIC_MULTIPLE_BY_QWORD_shift    = 3  (x8, alias)
+  STATIC_MULTIPLE_BY_16_shift       = 4  (x16)
+  STATIC_MULTIPLE_BY_32_shift       = 5  (x32)
+  STATIC_MULTIPLE_BY_64_shift       = 6  (x64)
+  STATIC_MULTIPLE_BY_512_shift      = 9  (x512)
+  STATIC_MULTIPLE_BY_1024_shift     = 10 (x1024)
+  STATIC_MULTIPLE_BY_PAGE_shift     = 12 (x4096)
 
-SHIFT CONSTANTS (move bits)
-  STATIC_MOVE_AL_TO_HIGH_shift   = 8
-  STATIC_MOVE_AX_TO_HIGH_shift   = 16
-  STATIC_MOVE_EAX_TO_HIGH_shift = 32
-  STATIC_MOVE_HIGH_TO_AL_shift   = 8
-  STATIC_MOVE_HIGH_TO_AX_shift   = 16
-  STATIC_MOVE_HIGH_TO_EAX_shift  = 32
+  STATIC_DIVIDE_BY_2_shift          = 1  (/2)
+  STATIC_DIVIDE_BY_4_shift          = 2  (/4)
+  STATIC_DIVIDE_BY_DWORD_shift      = 2  (/4, alias)
+  STATIC_DIVIDE_BY_8_shift          = 3  (/8)
+  STATIC_DIVIDE_BY_QWORD_shift      = 3  (/8, alias)
+  STATIC_DIVIDE_BY_16_shift         = 4  (/16)
+  STATIC_DIVIDE_BY_32_shift         = 5  (/32)
+  STATIC_DIVIDE_BY_256_shift        = 8  (/256)
+  STATIC_DIVIDE_BY_1024_shift       = 10 (/1024)
+  STATIC_DIVIDE_BY_PAGE_shift       = 12 (/4096)
 
-SIZE CONSTANTS
-  STATIC_BYTE_mask      = 0xFF
-  STATIC_BYTE_LOW_mask  = 0x0F
-  STATIC_BYTE_SIZE_byte = 1
-  STATIC_WORD_SIZE_byte = 2
+SHIFT CONSTANTS (move/replace register parts)
+  STATIC_REPLACE_AL_WITH_HIGH_shift    = 8
+  STATIC_REPLACE_AX_WITH_HIGH_shift    = 16
+  STATIC_REPLACE_EAX_WITH_HIGH_shift   = 32
+  STATIC_MOVE_AL_HALF_TO_LOW_shift     = 4 (1111b -> 0000b)
+  STATIC_MOVE_AL_HALF_TO_HIGH_shift    = 4 (0000b -> 1111b)
+  STATIC_MOVE_AL_TO_HIGH_shift         = 8
+  STATIC_MOVE_AX_TO_HIGH_shift         = 16
+  STATIC_MOVE_EAX_TO_HIGH_shift        = 32
+  STATIC_MOVE_HIGH_TO_AL_shift         = 8
+  STATIC_MOVE_HIGH_TO_AX_shift         = 16
+  STATIC_MOVE_HIGH_TO_EAX_shift        = 32
+
+SIZE AND MASK CONSTANTS
+  STATIC_BYTE_mask       = 0xFF
+  STATIC_BYTE_LOW_mask   = 0x0F
+  STATIC_BYTE_HIGH_mask  = 0xF0
+  STATIC_BYTE_SIZE_byte  = 1
+  STATIC_WORD_SIZE_byte  = 2
   STATIC_DWORD_SIZE_byte = 4
   STATIC_QWORD_SIZE_byte = 8
-  STATIC_QWORD_SIZE_bit = 64
-  STATIC_QWORD_mask = 0xFFFFFFFF00000000
+  STATIC_DQWORD_SIZE_byte = 16
+  STATIC_QWORD_SIZE_bit  = 64
+  STATIC_WORD_mask       = 0x000000000000FFFF
+  STATIC_DWORD_mask      = 0x00000000FFFFFFFF
+  STATIC_QWORD_mask      = 0xFFFFFFFF00000000
+  STATIC_QWORD_DIGIT_length = 16
 
 SIGN BIT POSITIONS
-  STATIC_BYTE_BIT_sign = 7
-  STATIC_WORD_BIT_sign = 15
+  STATIC_BYTE_BIT_sign  = 7
+  STATIC_WORD_BIT_sign  = 15
+  STATIC_DWORD_BIT_sign = 31
   STATIC_QWORD_BIT_sign = 63
 
-ASCII CONSTANTS
-  STATIC_ASCII_TERMINATOR = 0x0000
-  STATIC_ASCII_BACKSPACE  = 0x0008
-  STATIC_ASCII_TAB        = 0x0009
-  STATIC_ASCII_NEW_LINE   = 0x000A
-  STATIC_ASCII_ENTER      = 0x000D
-  STATIC_ASCII_ESCAPE     = 0x001B
-  STATIC_ASCII_SPACE      = 0x0020
-  STATIC_ASCII_MINUS      = 0x002D
-  STATIC_ASCII_DOT        = 0x002E
-  STATIC_ASCII_SLASH      = 0x002F
-  STATIC_ASCII_DIGIT_0    = 0x0030
-  STATIC_ASCII_DIGIT_9    = 0x0039
-  STATIC_ASCII_COLON      = 0x003A
-  STATIC_ASCII_BACKSLASH  = 0x005C
-  STATIC_ASCII_TILDE      = 0x007E
-  STATIC_ASCII_DELETE     = 0x007F
-  STATIC_ASCII_SEQUENCE_length = 6
+SCANCODE CONSTANTS (keyboard; 0xE0/0xE1 prefixes mark extended keys)
+  STATIC_SCANCODE_RELEASE_mask   = 0x80 (key-release bit)
+  STATIC_SCANCODE_TERMINATOR     = 0x00
+  STATIC_SCANCODE_BACKSPACE      = 0x08
+  STATIC_SCANCODE_TAB            = 0x09
+  STATIC_SCANCODE_NEW_LINE       = 0x0A
+  STATIC_SCANCODE_RETURN         = 0x0D
+  STATIC_SCANCODE_ESCAPE         = 0x1B
+  STATIC_SCANCODE_CTRL_LEFT      = 0x1D
+  STATIC_SCANCODE_SPACE          = 0x20
+  STATIC_SCANCODE_ASTERISK       = 0x2A
+  STATIC_SCANCODE_MINUS          = 0x2D
+  STATIC_SCANCODE_DOT            = 0x2E
+  STATIC_SCANCODE_SLASH          = 0x2F
+  STATIC_SCANCODE_DIGIT_0 .. _9  = 0x30 .. 0x39
+  STATIC_SCANCODE_COLON          = 0x3A
+  STATIC_SCANCODE_HIGH_CASE      = 0x41 ('A')
+  STATIC_SCANCODE_BACKSLASH      = 0x5C
+  STATIC_SCANCODE_CARET          = 0x5E
+  STATIC_SCANCODE_LOW_CASE       = 0x61 ('a')
+  STATIC_SCANCODE_TILDE          = 0x7E
+  Extended (0xE0..): NUMLOCK_DIVISION 0xE035, NUMLOCK_MULTIPLY 0xE037,
+  ALT_LEFT 0xE038, HOME 0xE047, UP 0xE048, PAGE_UP 0xE049,
+  LEFT 0xE04B, RIGHT 0xE04D, END 0xE04F, DOWN 0xE050,
+  PAGE_DOWN 0xE051, INSERT 0xE052, DELETE 0xE053,
+  SHIFT_LEFT 0xE0AA, SHIFT_RIGHT 0xE0B6,
+  NUMLOCK_ENTER 0xE01C, NUMLOCK_MINUS 0xE04A, NUMLOCK_ADD 0xE04E
+  Extended (0xE1..): NUMLOCK_4 0xE14B, NUMLOCK_6 0xE14D, NUMLOCK_2 0xE14F,
+  NUMLOCK_3 0xE150, NUMLOCK_0 0xE151, NUMLOCK_DOT 0xE152,
+  NUMLOCK_5 0xE14C
+
+TERMINAL SEQUENCES (%define, min length STATIC_SEQUENCE_length_min = 5)
+  STATIC_SEQUENCE_CLEAR          "^[t0]"   clear the console/terminal space
+  STATIC_SEQUENCE_CURSOR         "^[t1;__--]" set cursor at xxxx(16),yyyy(16)
+  STATIC_SEQUENCE_CURSOR_ENABLE  "^[t2;0]"  enable the text cursor
+  STATIC_SEQUENCE_CURSOR_DISABLE "^[t2;1]"  disable the text cursor
+  STATIC_SEQUENCE_CURSOR_PUSH    "^[t2;2]"  remember the position
+  STATIC_SEQUENCE_CURSOR_POP     "^[t2;3]"  restore the position
+  STATIC_SEQUENCE_CURSOR_RESET   "^[t2;4]"  reset the cursor lock
+  STATIC_SEQUENCE_CURSOR_UP/DOWN/LEFT/RIGHT "^[t2;C/D/E/F]"
+  STATIC_SEQUENCE_CLEAR_LINE     "^[t3]"
+  STATIC_SEQUENCE_SCROOL_UP      "^[t4;__--]" scroll up by "__" lines
+  STATIC_SEQUENCE_SCROOL_DOWN    "^[t5;__--]" scroll down by "__" lines
+  STATIC_SEQUENCE_NUMBER         "^[t6;-=~________]" value in a chosen base
+  Color sequences: "^[c07]" default, "^[c*0..F]" foreground,
+  "^[c0..F*]" background (0-9,A-F = black, red, green, brown,
+  blue, magenta, cyan, gray_light, gray, red_light, green_light,
+  yellow, blue_light, magenta_light, cyan_light, white)
 
 BOOLEAN CONSTANTS
-  STATIC_TRUE  = 0x00
-  STATIC_FALSE = 0x01
-  STATIC_EMPTY = 0x00
+  STATIC_TRUE    = 0x00
+  STATIC_FALSE   = 0x01
+  STATIC_EMPTY   = 0x00
   STATIC_RESERVED = STATIC_EMPTY
 
 MISC CONSTANTS
   STATIC_NOTHING         = 0x90 (NOP instruction)
-  STATIC_MAX_unsigned   = -1 (0xFFFFFFFFFFFFFFFF)
+  STATIC_MAX_unsigned    = -1 (0xFFFFFFFFFFFFFFFF)
   STATIC_NUMBER_SYSTEM_binary      = 0x02
   STATIC_NUMBER_SYSTEM_octal       = 0x08
   STATIC_NUMBER_SYSTEM_decimal     = 0x0A
   STATIC_NUMBER_SYSTEM_hexadecimal = 0x10
+  STATIC_SEQUENCE_length_min       = 5
 
-ERROR CODES
-  KERNEL_ERROR_PAGE_memory_low = 0x0001 (out of memory during page allocation)
-
-COLOR CONSTANTS (VGA text mode attributes)
-  ASCII Colors (escape sequences for future terminal):
-    STATIC_COLOR_ASCII_DEFAULT = STATIC_COLOR_ASCII_GREEN
-    STATIC_COLOR_ASCII_BLACK   = "\e[30m"
-    STATIC_COLOR_ASCII_BLUE    = "\e[34m"
-    STATIC_COLOR_ASCII_GREEN   = "\e[32m"
-    STATIC_COLOR_ASCII_CYAN    = "\e[36m"
-    STATIC_COLOR_ASCII_RED     = "\e[31m"
-    STATIC_COLOR_ASCII_MAGENTA = "\e[35m"
-    STATIC_COLOR_ASCII_BROWN   = "\e[33m"
-    STATIC_COLOR_ASCII_GRAY_LIGHT = "\e[37m"
-    STATIC_COLOR_ASCII_GRAY    = "\e[90m"
-    STATIC_COLOR_ASCII_BLUE_LIGHT = "\e[94m"
-    STATIC_COLOR_ASCII_GREEN_LIGHT = "\e[92m"
-    STATIC_COLOR_ASCII_CYAN_LIGHT = "\e[96m"
-    STATIC_COLOR_ASCII_RED_LIGHT = "\e[91m"
-    STATIC_COLOR_ASCII_MAGENTA_LIGHT = "\e[95m"
-    STATIC_COLOR_ASCII_YELLOW  = "\e[93m"
-    STATIC_COLOR_ASCII_WHITE   = "\e[39m"
-
-  VGA Colors (numeric values):
-    STATIC_COLOR_background_default = STATIC_COLOR_black
-    STATIC_COLOR_default            = STATIC_COLOR_ASCII_GRAY_LIGHT (string escape)
-    STATIC_COLOR_black              = 0x00101010
-    STATIC_COLOR_blue               = 1
-    STATIC_COLOR_green              = 2
-    STATIC_COLOR_cyan               = 3
-    STATIC_COLOR_red                = 4
-    STATIC_COLOR_magenta            = 5
-    STATIC_COLOR_brown              = 6
-    STATIC_COLOR_gray_light         = 7
-    STATIC_COLOR_gray               = 8
-    STATIC_COLOR_blue_light         = 9
-    STATIC_COLOR_green_light        = 10
-    STATIC_COLOR_cyan_light         = 11
-    STATIC_COLOR_red_light          = 12
-    STATIC_COLOR_magenta_light      = 13
-    STATIC_COLOR_yellow             = 14
-    STATIC_COLOR_white              = 15
+COLOR CONSTANTS (Everblush palette, 32-bit RGB)
+  STATIC_COLOR_BACKGROUND_default = STATIC_COLOR_black
+  STATIC_COLOR_default            = STATIC_COLOR_gray_light
+  STATIC_COLOR_black              = 0x00141B1E (background)
+  STATIC_COLOR_blue               = 0x0067B0E8
+  STATIC_COLOR_green              = 0x008CCF7E
+  STATIC_COLOR_cyan               = 0x006CBFBF
+  STATIC_COLOR_red                = 0x00E57474
+  STATIC_COLOR_magenta            = 0x00C47FD5
+  STATIC_COLOR_brown              = 0x00E5C76B (yellow)
+  STATIC_COLOR_gray_light         = 0x00B3B9B8 (light gray)
+  STATIC_COLOR_gray               = 0x00232A2D (lighter background)
+  STATIC_COLOR_blue_light         = 0x0067B0E8
+  STATIC_COLOR_green_light        = 0x008CCF7E
+  STATIC_COLOR_cyan_light         = 0x006CBFBF
+  STATIC_COLOR_red_light          = 0x00E57474
+  STATIC_COLOR_magenta_light      = 0x00C47FD5
+  STATIC_COLOR_yellow             = 0x00E5C76B
+  STATIC_COLOR_white              = 0x00DADADA (foreground)
 
 STRUCTURE: STATIC_STRUCTURE_BLOCK
-  Used for linked list nodes in memory allocation
-  Size: 4096 bytes (one page) minus 8 bytes for link
+  Used for the linked-list data chain of a VFS file
+  Size: one page (4096 bytes)
   Fields:
     .data: 4088 bytes of usable data
-    .link: 8 bytes for next node pointer
+    .link: 8 bytes for next block pointer (at the top of the page)

@@ -3,82 +3,78 @@ File: kernel/kernel.asm
 Author: arfy slowy
 
 OVERVIEW
-The main kernel file ties together all subsystems. After bootloader
-transfers control to 0x100000, it runs initialization in 32-bit mode,
-transitions to 64-bit long mode, completes hardware setup, releases
-init code pages, then enters the idle loop. No userspace exec is
-performed — the kernel task remains active and halts in `jmp $`.
+The main kernel file ties together all subsystems. The bootloader
+transfers control to 0x100000 already in 64-bit long mode; init runs
+in place (serial, video, memory, paging, ACPI, drivers, services),
+releases the init code pages, then enters the idle loop. No userspace
+exec is performed — the kernel task remains active and halts in `jmp $`.
 
 EXECUTION FLOW
 
-+------------+     +------------+     +--------------+
-| Bootloader | --> | init:      | --> | long_mode.asm|
-| loads at   |     | (32-bit)   |     | enable 64-bit|
-| 0x100000   |     |            |     | + paging     |
-+------------+     +------------+     +--------------+
-                                           |
-                                           v
-                                    +--------------+
-                                    | kernel_init: |
-                                    | video, font, |
-                                    | memory, acpi,|
-                                    | page, gdt,   |
-                                     | idt, rtc,    |
-                                     | ps2 (mouse+   |
-                                     |   kbd), ipc,  |
-                                     | vfs, storage,|
-                                    | network,     |
-                                    | task, svcs,  |
-                                    | smp          |
-                                    +--------------+
-                                           |
-                                           v
-                                       +------------------+
-                                       | clean:           |
-                                       | kernel_memory_   |
-                                       | release(init)    |
-                                       +------------------+
-                                              |
-                                              v
-                                       +------------------+
-                                       | kernel:          |
-                                       | kernel_task_     |
-                                       |   active         |
-                                       | set task flags   |
-                                       | jmp $ (idle)     |
-                                       +------------------+
++------------+     +----------------------+
+| Bootloader | --> | init:                |
+| loads at   |     | 64-bit, org 0x100000 |
+| 0x100000   |     +----------------------+
++------------+               |
+                             v
+                             +----------------------+
+                             | kernel_init:        |
+                             | serial, video,      |
+                             | memory, stream,     |
+                             | acpi, page, library,|
+                             | gdt, idt, rtc, ps2, |
+                             | ipc, vfs, storage,  |
+                             | network, task,      |
+                             | services, smp       |
+                             +----------------------+
+                                        |
+                                        v
+                             +----------------------+
+                             | clean:              |
+                             | kernel_memory_release|
+                             | (frees init pages)  |
+                             +----------------------+
+                                        |
+                                        v
+                             +----------------------+
+                             | kernel:             |
+                             | kernel_task_active  |
+                             | leave task rotation |
+                             | jmp $ (idle)        |
+                             +----------------------+
 
 BOOT SEQUENCE DETAIL
 
-Step 1: 32-bit entry at init:
+Step 1: entry at init (kernel.asm, [bits 64], org 0x100000):
   %include "kernel/init.asm"
-  - Check SMP semaphore (BSP vs AP path)
-  - Enable long mode (long_mode.asm -> 64-bit + paging)
-  - Process Multiboot info, init panic handler
-  - Load init data strings and structures
+  - Check SMP semaphore (BSP continues init, AP includes ap.asm)
+  - Include init data (strings, services list, VFS tables)
+    and the APIC configuration procedure
 
 Step 2: 64-bit init (kernel_init label):
-  - video.asm: Display welcome banner + runtime resolution
-  - font.asm: Display font name
-  - memory.asm: Parse memory map, init bitmap, display RAM count
+  - serial.asm: COM1 stdlog init (115200 baud, 8N1, FIFO)
+  - video.asm: Store framebuffer base, resolution, scanline
+  - memory.asm: Parse binary memory map, init page bitmap
+  - stream.asm: Pipe table + default output pipe (stdout/stderr/stdlog)
   - acpi.asm: Find RSDP/RSDT or XSDP/XSDT, enumerate CPUs
-  - page.asm: Set up PML4, map kernel/stack/video/APIC
+  - page.asm: Set up PML4, map kernel 1:1/stack/video/APIC
+  - library.asm: Share libraries with all processes
   - gdt.asm: Null, CS, DS, TSS descriptors
   - idt.asm: Exceptions (0-31), syscall (0x40 -> kernel_service), spurious (0xFF)
   - rtc.asm: 1024Hz periodic timer, IRQ 8, sti
   - ps2.asm: PS/2 mouse + keyboard init (mouse IRQ 12, keyboard IRQ 1)
   - ipc.asm: IPC message pool allocation
-  - vfs.asm: Root magicknot, /bin + /dev dirs, preload init/shell/wello/free
+  - vfs.asm: Root magicknot, /bin + /etc + /dev + /var dirs, preload 12 apps + hostname + welcome
   - storage.asm: PCI IDE scan, reset, enumerate, VFS /dev/hd* knots
   - network.asm: PCI NIC detection, i82540EM init
-  - task.asm: First kernel task, timer IRQ 0 mount
-   - services.asm: Start tresher + desu + workbench kernel services (tx, network, HTTP also started)
+  - task.asm: First kernel task, mount kernel_task on the APIC timer (vector 0x20)
+  - services.asm: Start gc, wm, gui, tx, network, http kernel services
 
 Step 3: Finalize:
   - call kernel_init_apic: Full APIC config, TICR = 1024Hz, EOI
   - smp.asm: Wake application processors via INIT/STARTUP IPI
   - Wait for all APs (kernel_init_ap_count == kernel_apic_count)
-  - Set kernel_init_semaphore = STATIC_FALSE (signals services to start)
+  - Set kernel_init_semaphore = STATIC_FALSE (init complete)
 
 Step 4: clean: - release init code pages:
   mov ecx, clean - $$           ; size of init code
@@ -87,9 +83,9 @@ Step 4: clean: - release init code pages:
   call kernel_memory_release     ; free pages
 
 Step 5: kernel: - enter idle loop:
-  call kernel_task_active        ; mark current task as active
-  mov word [rdi + KERNEL_TASK_STRUCTURE.flags], STATIC_EMPTY
-  jmp $                          ; idle forever
+  call kernel_task_active                       ; current task = kernel
+  and word [rdi + KERNEL_TASK_STRUCTURE.flags], ~KERNEL_TASK_FLAG_active
+  jmp $                                         ; idle forever
 
 CPU halts in jmp $ (idle loop). The kernel task remains active
 so the scheduler keeps ticking. Note: CS ring0 spin loop in
@@ -99,16 +95,16 @@ MEMORY LAYOUT
 
 +0x0000000000100000  KERNEL_BASE_address
 +--------------------+
-|                    |  init: (32-bit bootstrap code)
+|                    |  init: (kernel entry, 64-bit)
 |                    |  kernel/init.asm includes:
-|                    |    - long_mode.asm
-|                    |    - panic.asm, data.asm, multiboot.asm
-|                    |    - apic.asm, video.asm, font.asm, memory.asm
-|                    |    - acpi.asm, page.asm, gdt.asm, idt.asm
+|                    |    - ap.asm, data.asm, apic.asm
+|                    |    - serial.asm, video.asm, memory.asm
+|                    |    - stream.asm, acpi.asm, page.asm
+|                    |    - library.asm, gdt.asm, idt.asm
 |                    |    - rtc.asm, ps2.asm, ipc.asm, vfs.asm
 |                    |    - storage.asm, network.asm, task.asm
 |                    |    - services.asm, smp.asm
-+--------------------+  <-- align KERNEL_PAGE_SIZE_byte
++--------------------+  <-- align STATIC_PAGE_SIZE_byte
  | clean:             |  release init pages via kernel_memory_release
 | kernel:            |  kernel_task_active, set flags, jmp $ idle
 +--------------------+
@@ -130,26 +126,28 @@ MEMORY LAYOUT
 | kernel/exec.asm    |  Process execution (error propagation)
 | kernel/service.asm |  Syscall dispatcher (vector 0x40)
 +--------------------+
-| kernel/font/       |  jetbrains.asm (font bitmap data, 6x12px)
-+--------------------+
 | kernel/driver/     |  rtc.asm, ps2.asm, pci.asm,
 |                    |  network/i82540em.asm,
 |                    |  storage/ide.asm,
 |                    |  serial.asm (COM1 init + string send)
 +--------------------+
-| kernel/service/    |  tresher.asm, http.asm, tx.asm,
+| kernel/service/    |  gc.asm, http.asm, tx.asm,
 |                    |  network.asm (+ arp, icmp, tcp, checksum, config, data, wrap),
-|                    |  desu.asm (+ config, cursor, data, fill, gfx, init,
-|                    |  keyboard, object, panic, sleep, zone),
-|                    |  workbench_service.asm (+ config, data, init)
+|                    |  wm.asm (+ config, cursor, data, event, fill, gfx,
+|                    |  init, ipc, keyboard, object, service, zone),
+|                    |  gui.asm (+ clock, config, data, event, init,
+|                    |  ipc, ipc/wm.asm, taskbar)
 +--------------------+
 | library/           |  color.asm, input.asm, page_align_up.asm,
 |                    |  page_from_size.asm, string_*.asm,
-|                    |  bosu.asm (+ config, font)
+|                    |  font.asm + font/header.asm (Canele, 6x12px),
+|                    |  bosu.asm (+ data, header)
 +--------------------+
 kernel_end:
 
-All code after `kernel:` runs at 0xFFFF800000000000+ (high-half mapping).
+Kernel RAM is mapped 1:1 (identity) from KERNEL_BASE_address; the kernel
+stack lives at KERNEL_STACK_address (just below 1 MB), video and APIC
+registers are mapped at their physical addresses.
 
 LOAD ORDER (in include sequence)
 
@@ -182,7 +180,7 @@ LOAD ORDER (in include sequence)
  [kernel/service.asm]
         |
         v
- [kernel/font/canele.asm]
+ [kernel/library/font.asm]
         |
         v
  [kernel/driver/rtc.asm]
@@ -193,12 +191,12 @@ LOAD ORDER (in include sequence)
  [kernel/driver/serial.asm]
         |
         v
- [kernel/service/tresher.asm]
+ [kernel/service/gc.asm]
  [kernel/service/http.asm]
  [kernel/service/tx.asm]
  [kernel/service/network.asm]
-  [kernel/service/desu.asm]
-  [kernel/service/workbench_service.asm]    # includes bosu.asm internally
+  [kernel/service/wm.asm]
+  [kernel/service/gui.asm]
         |
         v
   [library/color.asm]
@@ -218,9 +216,9 @@ LOAD ORDER (in include sequence)
 CONFIGURATION CONSTANTS
 
 KERNEL_BASE_address         0x0000000000100000  (1MB, kernel load address)
-KERNEL_MEMORY_HIGH_REAL     0xFFFF800000000000  (high-half base)
-KERNEL_STACK_address        KERNEL_MEMORY_HIGH_VIRTUAL - 2 pages
-KERNEL_STACK_pointer        KERNEL_MEMORY_HIGH_VIRTUAL - 1 page
-SOFTWARE_base_address       0xFFFF800000000000  (userspace code = high-half real)
+KERNEL_STACK_address        KERNEL_BASE_address - 8 KiB (kernel/init stack)
+KERNEL_STACK_pointer        KERNEL_STACK_address + 4 KiB
+SOFTWARE_BASE_address       0x0000100000000000  (userspace code base)
 
-(no kernel_init_exec — kernel no longer spawns userspace)
+kernel_init_exec ("/bin/init") is defined in kernel/data.asm but unused;
+the kernel no longer spawns userspace directly.

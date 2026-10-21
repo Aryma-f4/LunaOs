@@ -2,7 +2,7 @@
 
 # LunaOs
 
-Multitasking operating system written in x86-64 assembly (formerly aidenOS). Features LFB framebuffer video, bitmap-based memory allocator, 4-level paging, round-robin scheduler, ACPI (RSDT/XSDT) with SMP support, and a network-enabled interactive shell.
+Multitasking operating system written in x86-64 assembly (formerly aidenOS). Features LFB framebuffer video, bitmap-based memory allocator, 4-level paging, round-robin scheduler, ACPI (RSDT/XSDT) with SMP support, an interactive shell, and a built-in HTTP service over the i82540EM driver.
 
 ## Requirements
 
@@ -13,7 +13,7 @@ Multitasking operating system written in x86-64 assembly (formerly aidenOS). Fea
 
 ```sh
 make          # builds build/luna_disk.raw
-make run-qemu # builds and boots it in QEMU (16 MiB RAM, 2 CPUs, 1280x720)
+make run-qemu # builds and boots it in QEMU (16 MiB RAM, 2 CPUs, 1920x1080)
 make debug    # builds and starts QEMU paused, waiting for gdb
 ```
 
@@ -21,12 +21,25 @@ The build is driven by the Makefile: the boot sector, stage 2, kernel, support
 library, and every application under `software/` are assembled with nasm and
 packed into one 1 MiB disk image.
 
+To test the network stack + HTTP service, boot with a NIC and a host port
+forward (guest is statically addressed 10.0.0.64):
+
+```sh
+qemu-system-x86_64 -drive file=build/luna_disk.raw,media=disk,format=raw \
+  -m 16 -smp 2 -rtc base=localtime -display gtk,zoom-to-fit=on \
+  -netdev user,id=n0,net=10.0.0.0/24,host=10.0.0.2,hostfwd=tcp::8080-10.0.0.64:80 \
+  -device e1000,netdev=n0
+
+curl http://127.0.0.1:8080/       # HTTP 200, LunaOS page
+curl http://127.0.0.1:8080/nope  # HTTP 404
+```
+
 ## Documentation
 
 Per-module docs live in a `docs/` directory next to the code they describe.
 
 ### Root
-- `docs/config.txt`  Global constants (page sizes, shifts, ASCII, colors)
+- `docs/config.txt`  Global constants (page sizes, shifts, scancodes, terminal sequences, colors)
 
 ### Kernel (`kernel/docs/`)
 | File | Description |
@@ -50,7 +63,7 @@ Per-module docs live in a `docs/` directory next to the code they describe.
 ### Kernel Services (`kernel/service/docs/`)
 | File | Description |
 |------|-------------|
-| `desu.txt` | Desktop environment service (compositor, window management, mouse cursor) |
+| `wm.txt` | Window manager service (objects, zones, fills, cursor, window syscalls) |
 
 ### Drivers (`kernel/driver/docs/`)
 | File | Description |
@@ -67,9 +80,10 @@ The kernel mounts these applications under `/bin` as its initial VFS image:
 | cat | `/bin/cat` |
 | console | `/bin/console` |
 | fetch | `/bin/fetch` |
+| glaze | `/bin/glaze` |
 | hello | `/bin/hello` |
+| lulu | `/bin/lulu` |
 | ls | `/bin/ls` |
-| moko | `/bin/moko` |
 | redia | `/bin/redia` |
 | shell | `/bin/shell` |
 | tetris | `/bin/tetris` |
@@ -77,22 +91,22 @@ The kernel mounts these applications under `/bin` as its initial VFS image:
 
 `/etc/hostname` and `/var/welcome.txt` complete the initial file system.
 
-
 ## Key Systems
 
 | System | Description |
 |--------|-------------|
-| **Video** | LFB framebuffer (32bpp, resolution read from multiboot, defaults 640x480), bitmap font rendering, cursor with nesting lock, SIMD-accelerated scrolling via `kernel_memory_copy` |
+| **Video** | LFB framebuffer (32bpp, width/height read from the bootloader's VESA mode info), bitmap font rendering, cursor with nesting lock, SIMD-accelerated scrolling via `kernel_memory_copy` |
 | **Paging** | 4-level page tables (PML4 → PDPT → PD → PT), 4 KB / 2 MB pages |
 | **Memory** | Bitmap-based physical page allocator, SIMD-accelerated memory copy (`macro_copy`, 256 B/iter, prefetchnta + movdqa + movntdq) |
 | **ACPI** | RSDP v1/v2 detection, RSDT (32-bit) and XSDT (64-bit) support, MADT parsing for LAPIC/IO-APIC enumeration |
-| **Scheduling** | Round-robin scheduler driven by RTC at 1024 Hz, per-task flags (active, closed, service, processing, secured, thread) |
+| **Scheduling** | Round-robin scheduler driven by the APIC timer at 1024 Hz, per-task flags (active, closed, service, processing, secured, thread) |
 | **APIC** | Local APIC for timer interrupts, IO-APIC for device interrupt routing |
-| **SMP** | Multi-processor boot via 16-bit real mode trampoline (`boot.asm`), AP wake through IPI, per-CPU GDT TSS entries |
+| **SMP** | Multi-processor boot via 16-bit real mode trampoline (`kernel/init/boot.asm`), AP wake through IPI, per-CPU GDT TSS entries |
 | **Drivers** | PS/2 keyboard (scan codes, shift/capslock) + mouse (3-byte packet parsing, signed/unsigned movement, screen bounds clamping), RTC, PCI enumeration, IDE ATA/ATAPI, Intel 82540EM Gigabit Ethernet |
+| **Network** | Intel 82540EM driver (bus-mastered RX/TX rings, IO-APIC interrupts) + IPv4/ARP/ICMP/TCP stack with checksums, HTTP service on port 80 (guest 10.0.0.64) |
 | **IPC** | Inter-process communication primitives |
-| **Font** | Bitmap font glyph data loaded from `kernel/font/jetbrains.asm`, font name displayed at boot |
-| **Services** | Task reaper (tresher) + desktop environment (desu) + workbench — started at boot |
+| **Font** | Canele bitmap font (6x12 px) glyph data in `kernel/library/font.asm`, dimensions in `kernel/library/font/header.asm` |
+| **Services** | Garbage collector (gc) + window manager (wm) + GUI compositor + network transmit/network/HTTP — started at boot |
 | **Color** | ARGB alpha blending (`library_color_alpha`) and alpha inversion (`library_color_alpha_invert`) |
 
 ## References
@@ -100,7 +114,6 @@ The kernel mounts these applications under `/bin` as its initial VFS image:
 | System | OSDev Wiki |
 |--------|-----------|
 | **x86-64 Long Mode** | [wiki.osdev.org/x86-64](https://wiki.osdev.org/x86-64)  64-bit mode init, CPU modes |
-| **Multiboot** | [wiki.osdev.org/Multiboot](https://wiki.osdev.org/Multiboot)  Bootloader protocol, framebuffer info |
 | **LFB Framebuffer** | [wiki.osdev.org/Drawing_In_a_Linear_Framebuffer](https://wiki.osdev.org/Drawing_In_a_Linear_Framebuffer)  Pixel-based video output |
 | **VGA Fonts** | [wiki.osdev.org/VGA_Fonts](https://wiki.osdev.org/VGA_Fonts)  Bitmap font rendering in graphics mode |
 | **ACPI** | [wiki.osdev.org/ACPI](https://wiki.osdev.org/ACPI)  RSDP, RSDT, XSDT, MADT table parsing |

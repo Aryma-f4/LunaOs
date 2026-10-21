@@ -1,0 +1,79 @@
+WM - WINDOW MANAGER SERVICE
+File: kernel/service/wm.asm
+Author: arfy slowy
+
+OVERVIEW
+Window manager and compositor: owns the window object list, dirty zones,
+fill operations, and the cursor. Window lifecycle (create, update,
+close, minimize) arrives through IRQ 0x41; mouse and keyboard events
+are routed back to the window owners over IPC.
+
+Started at boot from kernel_init_services_list (position 2, after the
+garbage collector, before the GUI).
+
+LOOP
+
+kernel_wm:
+  init.asm -> fetch own PID, invert cursor alpha, point the framebuffer
+              object at direct VRAM (no double buffering), allocate the
+              object/table/fill/zone list pages, mount IRQ 0x41
+              (kernel_wm_irq), set kernel_wm_semaphore, then wait until
+              the first object is registered
+.loop:
+  call kernel_wm_event       - mouse + keyboard events
+  call kernel_wm_object      - flush objects updated by their owners
+  call kernel_wm_zone        - register dirty zones for them
+  call kernel_wm_fill        - composite all fill fragments
+  call kernel_wm_cursor      - cursor position and rendering
+  call kernel_sleep
+  jmp .loop
+
+WINDOW API (service.asm, KERNEL_WM_IRQ = 0x41)
+
+  KERNEL_WM_WINDOW_close     0x00
+  KERNEL_WM_WINDOW_create    0x01
+  KERNEL_WM_WINDOW_update    0x02
+  KERNEL_WM_WINDOW_minimize  0x03   (toggle visibility)
+
+OBJECT FLAGS (kernel/header/wm.asm — shared with the window owner
+through LIBRARY_BOSU_WINDOW_FLAG_*; the object IS the window structure)
+
+  KERNEL_WM_OBJECT_FLAG_flush     1 << 0   object content updated
+  KERNEL_WM_OBJECT_FLAG_visible   1 << 1   reserved for the GUI
+  KERNEL_WM_OBJECT_FLAG_fixed_xy  1 << 2   fixed on the X,Y axis
+  KERNEL_WM_OBJECT_FLAG_fixed_z   1 << 3   fixed on the Z axis
+  KERNEL_WM_OBJECT_FLAG_fragile   1 << 4   hidden on an LMB/RMB elsewhere
+  KERNEL_WM_OBJECT_FLAG_pointer   1 << 5   cursor-type object
+  KERNEL_WM_OBJECT_FLAG_arbiter   1 << 6   superobject
+  KERNEL_WM_OBJECT_FLAG_undraw    1 << 7   redraw the space beneath it
+
+STRUCTURES (kernel/service/wm/config.asm)
+
+  KERNEL_WM_OBJECT_NAME_length              31
+  KERNEL_WM_OBJECT_LIST_limit               objects per list page (last slot empty)
+  KERNEL_WM_FILL_LIST_limit                 fills per list page
+  KERNEL_WM_ZONE_LIST_limit                 zones per list page
+  KERNEL_WM_STRUCTURE_OBJECT_LIST_ENTRY     .object_address qword
+  KERNEL_WM_STRUCTURE_FIELD                 .x .y .width .height (word each)
+  KERNEL_WM_STRUCTURE_OBJECT                .field + .address (target buffer)
+  KERNEL_WM_STRUCTURE_OBJECT_EXTRA          .size .flags .id .length .name .pid
+                                            (appended after OBJECT: the window)
+  KERNEL_WM_STRUCTURE_FILL                  .field + .object (+ render state)
+  KERNEL_WM_STRUCTURE_ZONE                  dirty region descriptor
+
+SUBFILES
+
+| File | Description |
+|------|-------------|
+| config.asm | Constants, structure definitions, list limits |
+| data.asm | Semaphores (kernel_wm_semaphore, object, arbiter, fill, zone, object id), mouse buttons, keyboard alt, active/selected object pointers |
+| init.asm | Boot init: PID fetch, cursor alpha invert, framebuffer object setup, list page allocation, IRQ 0x41 mount, wait for first object |
+| event.asm | Mouse and keyboard event intake |
+| object.asm | Object registry: insert, flush, find, raise/move |
+| zone.asm | Register dirty regions for updated objects |
+| fill.asm | Composite fills into the framebuffer (alpha blend, clipping) |
+| cursor.asm | Cursor matrix rendering (gfx/cursor.data) |
+| keyboard.asm | Route key presses to the focused window |
+| service.asm | kernel_wm_irq — window create/update/close/minimize (IRQ 0x41) |
+| ipc.asm | Forward mouse/keyboard messages to window owners (kernel_wm_ipc_*) |
+| gfx/cursor.data | Cursor bitmap data |

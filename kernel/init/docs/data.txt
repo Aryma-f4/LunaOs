@@ -3,106 +3,94 @@ File: kernel/init/data.asm
 Author: arfy slowy
 
 OVERVIEW
-Central data repository for initialization: display strings, error
-messages, semaphores, VFS directory structure, preloaded file
-binaries, and the kernel services startup list.
+Central data repository for initialization: string constants (task name,
+errors, storage path template), semaphores, the VFS directory/file tables,
+embedded binaries, and the kernel services startup list.
 
 VARIABLE LAYOUT (in assembly order)
 
 +--------------------------------------------+
-| Display strings (null-terminated, with _end)|
-| - welcome, video, font, memory, storage    |
+| String constants                           |
+| - name ("luna"), error messages,           |
+|   /dev/hd path template (+ letter)         |
 +--------------------------------------------+
-| Error message strings                      |
-| - memory_low, acpi, acpi_corrupted,        |
-|   apic, ioapic                             |
-+--------------------------------------------+
-| Status message strings                     |
-| - acpi_search, acpi_search_found           |
-+--------------------------------------------+
-| Semaphores (5 bytes)                       |
-| - apic, ioapic, smp, ap, global (data.asm) |
+| Semaphores (4 bytes)                       |
+| - apic, ioapic, smp, ap                    |
 +--------------------------------------------+
 | Counters (2 bytes)                         |
 | - ap_count, apic_id_highest                |
 +--------------------------------------------+
 | Services list                              |
-| - tresher, tx, network, HTTP               |
+| - gc, wm, gui, tx, network, HTTP           |
 +--------------------------------------------+
 | VFS directory structure                    |
-| - [/bin, 4 bytes] [/dev, 4 bytes] [0]     |
+| - [/bin] [/etc] [/dev] [/var] + 0 byte     |
 +--------------------------------------------+
 | VFS files table                            |
-| - 3 entries + terminator                   |
-|   [/bin/init] [/bin/shell] [/bin/wello]   |
+| - 14 entries + terminator                  |
+|   12 /bin apps + hostname + welcome        |
 +--------------------------------------------+
 | Embedded binaries                          |
-| - init (incbin "build/init")              |
-| - shell (incbin "build/shell")            |
-| - wello (incbin "build/wello")            |
+| - 12 apps (incbin "build/*") +             |
+|   hostname + welcome                       |
 +--------------------------------------------+
-| Boot trampoline                            |
-| - boot (incbin "build/boot")              |
+| Boot trampoline + support library          |
+| - boot (incbin "build/boot")               |
+| - library (incbin "build/library")         |
 +--------------------------------------------+
 
-DISPLAY STRINGS (boot output, shown in order)
+STRING CONSTANTS (kernel/init/data.asm)
 
-Welcome:     kernel_init_string_welcome
-             "[green]Welcome to Luna OS![gray] (v1.100 x86_64)[newline]"
+Task name:
+  kernel_init_string_name / _end  - KERNEL_name ("luna"), names the kernel task
 
-Video:       kernel_init_string_video
-             "[green]::[default] Video resolution at [white]"
-             kernel_init_string_video_separator "[default]x[white]"
+Error messages (passed to kernel_panic on fatal init failure):
+  kernel_init_string_error_memory       - "Error: Memory map damaged."
+  kernel_init_string_error_memory_low   - "Error: Not enough memory."
+  kernel_init_string_error_acpi_header  - "Error: RSDP/XSDP not found."
+  kernel_init_string_error_acpi         - "Error: RSDT/XSDT not recognized."
+  kernel_init_string_error_apic         - "Error: APIC not found."
+  kernel_init_string_error_ioapic       - "Error: I/O APIC not found."
 
-Font:        kernel_init_string_video_font
-             "[green]::[default] Font: [default]"
+Storage path template (init/storage.asm creates /dev/hda, hdb, ...):
+  kernel_init_string_storage_ide_hd_path   - "/dev/hd"
+  kernel_init_string_storage_ide_hd_letter - "a" (incremented per drive)
+  kernel_init_string_storage_ide_hd_end    - end marker
 
-Memory:      kernel_init_string_memory_size
-             "[green]::[default] Available [white]"
-             kernel_init_string_memory_format
-             "[default] KiB of RAM memory.[newline]"
+There is no boot-time console output: init runs headless and the first
+visible output comes from the GUI.
 
-Storage:     kernel_init_string_storage_ide
-             "[green]::[default] IDE storage devices:[newline]"
-             kernel_init_string_storage_ide_hd " " (one space prefix)
-             kernel_init_string_storage_ide_hd_path "/dev/hd"
-             kernel_init_string_storage_ide_hd_letter "a" (incremented)
-             kernel_init_string_storage_ide_size " of size [white]"
-             kernel_init_string_storage_ide_format " KiB[newline]"
+SERVICES LIST (kernel_init_services_list)
 
-SEMAPHORE USAGE
-
-kernel_init_apic_semaphore   -- Lock for APIC MMIO register access
-kernel_init_ioapic_semaphore -- Lock for IO-APIC register access
-kernel_init_smp_semaphore    -- BSP vs AP path selector (FALSE=BSP, TRUE=AP)
-kernel_init_ap_semaphore     -- AP boot synchronization barrier
-kernel_init_semaphore        -- (in kernel/data.asm) Global init done flag
-
- SERVICES LIST (kernel_init_services_list)
-
- List format: array of KERNEL_INIT_STRUCTURE_SERVICE triples, terminated
+ List format: array of KERNEL_INIT_STRUCTURE_SERVICE entries, terminated
  by dq STATIC_EMPTY:
 
    +0x00  .pointer  resb 8   -- entry point
-   +0x08  .length   resb 1   -- name string length
-   +0x09  .name:             -- name string (variable)
+   +0x08  .size     resb 8   -- size of service code in bytes
+   +0x10  .length   resb 1   -- name string length
+   +0x11  .name:             -- name string (variable)
+   Entry size: .SIZE = 17 + name length (iterator advances by .SIZE + length)
 
- Order  Module         Name       Function
- -----  ------         ----       --------
-   1    service_tresher      "tresher"             Task reaper (reclaims closed task slots)
-   2    service_desu        "desu"                Desktop environment (compositor, windows, mouse)
-   3    service_workbench   "service_workbench"   Desktop background + menu bar
+ Order  Module              Name                      Function
+ -----  ------              ----                      --------
+   1    kernel_gc           "garbage collector"       Reap finished tasks, close their windows
+   2    kernel_wm           "window manager"          Objects, zones, fills, cursor, window syscalls
+   3    kernel_gui          "graphical user interface" Taskbar, clock, GUI IPC
+   4    service_tx          "network transmit"        Drain queued frames into the NIC TX ring
+   5    service_network     "network service"         IPv4/ARP/ICMP/TCP stack, received frames
+   6    service_http        "http service"            HTTP responses on TCP port 80
 
- Services run as kernel tasks. Started sequentially in init/services.asm.
- tresher, desu, and workbench are started at boot — service_tx, service_network,
- and service_http were removed from the boot-time services list.
+ Services run as kernel tasks, started sequentially in init/services.asm;
+ all six are started at boot.
 
 VFS DIRECTORY STRUCTURE (kernel_init_vfs_directory_structure)
 
 Format: [length_byte][path_bytes] per entry, 0x00 terminator
 
 Entry 1: db 0x04, "/bin"     -> creates /bin directory
-Entry 2: db 0x04, "/dev"     -> creates /dev directory
+Entry 2: db 0x04, "/etc"     -> creates /etc directory
+Entry 3: db 0x04, "/dev"     -> creates /dev directory
+Entry 4: db 0x04, "/var"     -> creates /var directory
 End:     db STATIC_EMPTY
 
 VFS FILES TABLE (kernel_init_vfs_files)
@@ -110,29 +98,26 @@ VFS FILES TABLE (kernel_init_vfs_files)
 Format per entry (KERNEL_INIT_STRUCTURE_VFS_FILE):
 +0x00: .data_pointer qword  -- pointer to embedded binary data
 +0x08: .size         qword  -- size of binary data in bytes
-+0x10: .length       byte   -- length of path string
-+0x11: .path         var    -- path string (e.g. "/bin/init")
-Entry size: .SIZE = 17 + path_length
++0x10: .mode         word   -- file mode bits (KERNEL_VFS_FILE_MODE_*)
++0x12: .length       byte   -- length of path string
++0x13: .path         var    -- path string (e.g. "/bin/shell")
+Entry size: .SIZE = 19 + path_length
 
 Table terminated by dq STATIC_EMPTY
 
-Entry  Path           Binary                 Source
------  ----           ------                 ------
-  1    /bin/init      kernel_init_vfs_file_init  incbin "build/init"
-  2    /bin/shell     kernel_init_vfs_file_shell incbin "build/shell"
-  3    /bin/wello     kernel_init_vfs_file_hello incbin "build/wello"
+Entry  Path                Source label (incbin)
+-----  ----                ---------------------
+ 1-12  /bin/{shell, hello, tm, console, ls, cat, lulu, glaze,
+           redia, calculator, tetris, fetch}
+       kernel_init_vfs_file_<name> ("build/<name>")
+ 13    /etc/hostname       kernel_init_vfs_file_hostname ("fs/etc/hostname")
+ 14    /var/welcome.txt    kernel_init_vfs_file_welcome ("fs/var/welcome.txt")
 
 EMBEDDED BINARY: kernel_init_boot_file
   incbin "build/boot" -- SMP AP boot trampoline
-  Loaded at 0x8000 during SMP init. Contains 16-bit real-mode code
+  Loaded at 0x7000 during SMP init. Contains 16-bit real-mode code
   that transitions APs to 64-bit long mode.
 
-BOOT OUTPUT SEQUENCE
-
-[green]Welcome to Luna OS![gray] (v1.100 x86_64)
-[green]::[default] Video resolution at [white]640x480
-[green]::[default] Font: [default]<font_name>
-[green]::[default] Available [white]2048000[default] KiB of RAM memory.
-[green]::[default] IDE storage devices:
- /dev/hda of size [white]2097152[default] KiB
- /dev/hdb of size [white]2097152[default] KiB
+EMBEDDED BINARY: kernel_init_library_file
+  incbin "build/library" -- support library shared with all processes
+  (init/library.asm maps it into every task)
