@@ -106,12 +106,6 @@ kernel_init_vfs_files:
  db 9
  db "/bin/lulu"
 
- dq kernel_init_vfs_file_glaze
- dq kernel_init_vfs_file_glaze_end - kernel_init_vfs_file_glaze
- dw KERNEL_VFS_FILE_MODE_USER_full_control | KERNEL_VFS_FILE_MODE_GROUP_execute_or_traverse | KERNEL_VFS_FILE_MODE_OTHER_execute_or_traverse
- db 10
- db "/bin/glaze"
-
  dq kernel_init_vfs_file_redia
  dq kernel_init_vfs_file_redia_end - kernel_init_vfs_file_redia
  dw KERNEL_VFS_FILE_MODE_USER_full_control | KERNEL_VFS_FILE_MODE_GROUP_execute_or_traverse | KERNEL_VFS_FILE_MODE_OTHER_execute_or_traverse
@@ -166,8 +160,6 @@ kernel_init_vfs_file_cat incbin "build/cat"
 kernel_init_vfs_file_cat_end:
 kernel_init_vfs_file_lulu incbin "build/lulu"
 kernel_init_vfs_file_lulu_end:
-kernel_init_vfs_file_glaze incbin "build/glaze"
-kernel_init_vfs_file_glaze_end:
 kernel_init_vfs_file_redia incbin "build/redia"
 kernel_init_vfs_file_redia_end:
 kernel_init_vfs_file_calculator incbin "build/calculator"

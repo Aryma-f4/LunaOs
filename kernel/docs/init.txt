@@ -99,7 +99,7 @@ Definitions included before kernel_init (data + APIC procedure):
       Initialize Virtual File System
       Allocates: root directory page (pointer saved in kernel_vfs_magicknot .data)
       Creates: root directories (kernel_init_vfs_directory_structure: /bin, /etc, /dev, /var)
-      Preloads: 12 applications (shell, hello, tm, console, ls, cat, lulu, glaze,
+      Preloads: 11 applications (shell, hello, tm, console, ls, cat, lulu,
                 redia, calculator, tetris, fetch) + /etc/hostname + /var/welcome.txt
       Runs after IPC, before network
 
@@ -276,7 +276,7 @@ INITIALIZATION FLOW
  +-------------------------+
  | vfs.asm                 |
  | (/bin,/etc,/dev,/var)   |
- | 12 apps + hostname +    |
+ | 11 apps + hostname +    |
  | welcome.txt preloaded   |
  +-----------+-------------+
              |

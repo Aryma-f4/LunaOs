@@ -31,7 +31,7 @@ VARIABLE LAYOUT (in assembly order)
 |   12 /bin apps + hostname + welcome        |
 +--------------------------------------------+
 | Embedded binaries                          |
-| - 12 apps (incbin "build/*") +             |
+| - 11 apps (incbin "build/*") +             |
 |   hostname + welcome                       |
 +--------------------------------------------+
 | Boot trampoline + support library          |
@@ -107,7 +107,7 @@ Table terminated by dq STATIC_EMPTY
 
 Entry  Path                Source label (incbin)
 -----  ----                ---------------------
- 1-12  /bin/{shell, hello, tm, console, ls, cat, lulu, glaze,
+ 1-11  /bin/{shell, hello, tm, console, ls, cat, lulu,
            redia, calculator, tetris, fetch}
        kernel_init_vfs_file_<name> ("build/<name>")
  13    /etc/hostname       kernel_init_vfs_file_hostname ("fs/etc/hostname")

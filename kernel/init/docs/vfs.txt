@@ -5,7 +5,7 @@ Author: arfy slowy
 OVERVIEW
 Boot-time Virtual File System initialization. Allocates the root
 magicknot, creates predefined directories (/bin, /etc, /dev, /var),
-and preloads 12 applications plus /etc/hostname and /var/welcome.txt
+and preloads 11 applications plus /etc/hostname and /var/welcome.txt
 from embedded data into VFS regular file knots.
 
 STRUCTURE
@@ -70,7 +70,7 @@ kernel_init_vfs
               jmp  .file
         |
         +-- Preloads:
-              /bin/*       <- kernel_init_vfs_file_* (12 applications, incbin "build/*")
+              /bin/*       <- kernel_init_vfs_file_* (11 applications, incbin "build/*")
               /etc/hostname  <- kernel_init_vfs_file_hostname (incbin "fs/etc/hostname")
               /var/welcome.txt <- kernel_init_vfs_file_welcome (incbin "fs/var/welcome.txt")
 
@@ -85,7 +85,7 @@ init/data.asm                   init/vfs.asm
 
 +-------------+                 +---------------------+
 | VFS files:  | --- [rsi] -->   | .file loop:         |
-| 12 apps +   |                 | path_resolve + touch|
+| 11 apps +   |                 | path_resolve + touch|
 | 2 data files|                 | + append(data)      |
 +-------------+                 +---------------------+
        |

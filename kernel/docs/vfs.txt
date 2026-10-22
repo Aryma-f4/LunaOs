@@ -140,7 +140,7 @@ kernel_vfs_magicknot
             |    +-- [".", symlink -> /bin]
             |    +-- ["..", symlink -> /]
             |    +-- ["shell", "hello", "tm", "console", "ls", "cat", ...]
-            |    +-- ["lulu", "glaze", "redia", "calculator", ...]
+            |    +-- ["lulu", "redia", "calculator", ...]
             |    +-- ["tetris", "fetch"]
             |
             +-- ["etc", directory, .data -> /etc child page]
@@ -168,6 +168,6 @@ INIT-TIME FILE PRELOADING (kernel/init/vfs.asm)
     3. Create file knot (kernel_vfs_file_touch, type = regular)
     4. Write data (kernel_vfs_file_append)
 
-  Preloaded files: 12 applications (/bin/shell, /bin/hello, /bin/tm,
-  /bin/console, /bin/ls, /bin/cat, /bin/lulu, /bin/glaze, /bin/redia,
+  Preloaded files: 11 applications (/bin/shell, /bin/hello, /bin/tm,
+  /bin/console, /bin/ls, /bin/cat, /bin/lulu, /bin/redia,
   /bin/calculator, /bin/tetris, /bin/fetch), /etc/hostname, /var/welcome.txt

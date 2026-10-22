@@ -14,7 +14,7 @@ lulu_document_analyze:
  xor r14, r14
  xor r15, r15
 
- ; remove the "caret" characters from the document, Moko does not handle them by default
+ ; remove the "caret" characters from the document, lulu does not handle them by default
  mov rsi, rdi
  call lulu_document_enter_remove
 
