@@ -26,6 +26,9 @@ service_http:
  ; fetch the connection identifier
  mov rbx, qword [rdi + KERNEL_IPC_STRUCTURE.other]
 
+ ; preserve the packet space handed over by the network service
+ push qword [rdi + KERNEL_IPC_STRUCTURE.pointer]
+
  ; a query for the service root?
  mov ecx, service_http_get_root_end - service_http_get_root
  mov rsi, qword [rdi + KERNEL_IPC_STRUCTURE.pointer]
@@ -51,6 +54,10 @@ service_http:
 
  ; close the connection, the response has no length header
  call service_network_tcp_port_close
+
+ ; release the packet data space
+ pop rdi
+ call kernel_memory_release_page
 
  ; serve the next query
  jmp .loop
