@@ -64,7 +64,7 @@ Step 2: 64-bit init (kernel_init label):
   - rtc.asm: 1024Hz periodic timer, IRQ 8, sti
   - ps2.asm: PS/2 mouse + keyboard init (mouse IRQ 12, keyboard IRQ 1)
   - ipc.asm: IPC message pool allocation
-  - vfs.asm: Root magicknot, /bin + /etc + /dev + /var dirs, preload 12 apps + hostname + welcome
+  - vfs.asm: Root magicknot, /bin + /etc + /dev + /var dirs, preload 11 apps + hostname + welcome
   - storage.asm: PCI IDE scan, reset, enumerate, VFS /dev/hd* knots
   - network.asm: PCI NIC detection, i82540EM init
   - task.asm: First kernel task, mount kernel_task on the APIC timer (vector 0x20)

@@ -3,7 +3,7 @@
 WIDTH  = 1920
 HEIGHT = 1080
 
-APPS = fetch free init wello cat console hello ls lulu glaze redia shell calculator tetris tm
+APPS = fetch free init wello cat console hello ls lulu redia shell calculator tetris tm
 
 # Every nasm target incbin's or %include's other sources, and none of the rules
 # below could track that chain. One glob makes any source edit rebuild anything
@@ -35,7 +35,7 @@ build/boot: kernel/init/boot.asm $(ALL_ASM) | build
 # files under fs/ as its initial VFS image, so every one of them is a real
 # prerequisite. Upstream's shell script built them in a fixed order and never
 # had to declare this; the dependency has to be stated here.
-KERNEL_VFS_APPS = fetch shell hello tm console ls cat lulu glaze redia calculator tetris
+KERNEL_VFS_APPS = fetch shell hello tm console ls cat lulu redia calculator tetris
 KERNEL_VFS_DEPS = $(addprefix build/,$(KERNEL_VFS_APPS)) build/boot build/library \
                   fs/etc/hostname fs/var/welcome.txt
 

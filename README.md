@@ -80,7 +80,6 @@ The kernel mounts these applications under `/bin` as its initial VFS image:
 | cat | `/bin/cat` |
 | console | `/bin/console` |
 | fetch | `/bin/fetch` |
-| glaze | `/bin/glaze` |
 | hello | `/bin/hello` |
 | lulu | `/bin/lulu` |
 | ls | `/bin/ls` |

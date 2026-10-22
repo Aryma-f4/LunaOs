@@ -97,5 +97,5 @@ lulu_string_scroll_down_end:
 lulu_key_ctrl_semaphore db STATIC_FALSE
 lulu_key_insert_semaphore db STATIC_FALSE
 
-lulu_string_console_header db "^[hMoko]"
+lulu_string_console_header db "^[hLulu]"
 lulu_string_console_header_end:
