@@ -17,6 +17,12 @@ tetris_collision:
  ; local variable
  push TETRIS_BRICK_STRUCTURE_height
 
+ ; the block structure outside of the playfield? a wrapped X (e.g. moving
+ ; left through the wall) shifts the rows by 31, which empties them and
+ ; silently disables every check below
+ cmp r8b, TETRIS_PLAYGROUND_WIDTH_brick
+ ja .collision
+
 .loop:
  ; fetch the current row of the block structure (zero-extended: ah must not
  ; leak into the shifted value — the original mov al, bl left it as garbage)
