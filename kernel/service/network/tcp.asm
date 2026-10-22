@@ -79,6 +79,13 @@ service_network_tcp_psh:
  rol cx, STATIC_REPLACE_AL_WITH_HIGH_shift ; Little-Endian
  sub cx, bx ; correct the size by the IP header
 
+ ; bound the segment size by the packet space
+ ; ponytail: clamp only, full frame validation if raw NIC traffic ever matters
+ cmp ecx, STATIC_PAGE_SIZE_byte
+ jbe .size_bounded
+ mov ecx, STATIC_PAGE_SIZE_byte
+.size_bounded:
+
  ; save the data size of the TCP frame in a local variable
  push rcx
 

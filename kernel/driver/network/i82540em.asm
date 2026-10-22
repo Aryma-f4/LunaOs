@@ -27,6 +27,7 @@ DRIVER_NIC_I82540EM_STATUS equ 0x0008 ; Device Status Register
 DRIVER_NIC_I82540EM_EECD equ 0x0010 ; EEPROM/Flash Control & Data Register
 DRIVER_NIC_I82540EM_EERD equ 0x0014 ; EEPROM Read Register
 DRIVER_NIC_I82540EM_EERD_done equ 0x04 ; Read Complete (bit index for BT, QEMU value 0x10)
+DRIVER_NIC_I82540EM_EERD_attempt_limit equ 0x00010000 ; stop spinning on a silent EEPROM
 DRIVER_NIC_I82540EM_CTRLEXT equ 0x0018 ; Extended Control Register
 DRIVER_NIC_I82540EM_MDIC equ 0x0020 ; MDI Control Register
 DRIVER_NIC_I82540EM_FCAL equ 0x0028 ; Flow Control Address Low
@@ -436,28 +437,40 @@ driver_nic_i82540em:
 
  ; read the contents of the register at address 0x00
  mov dword [rsi + DRIVER_NIC_I82540EM_EERD], 0x00000001
+ mov ecx, DRIVER_NIC_I82540EM_EERD_attempt_limit
 .eerd0:
  mov eax, dword [rsi + DRIVER_NIC_I82540EM_EERD]
  bt eax, DRIVER_NIC_I82540EM_EERD_done
- jnc .eerd0 ; not ready yet
+ jc .eerd0_ready ; yes
+ dec ecx
+ jnz .eerd0 ; not ready yet
+.eerd0_ready:
  shr eax, STATIC_MOVE_HIGH_TO_AX_shift
  mov word [rel driver_nic_i82540em_mac_address + SERVICE_NETWORK_STRUCTURE_MAC.0], ax
 
  ; read the contents of the register at address 0x01
  mov dword [rsi + DRIVER_NIC_I82540EM_EERD], 0x00000101
+ mov ecx, DRIVER_NIC_I82540EM_EERD_attempt_limit
 .eerd1:
  mov eax, dword [rsi + DRIVER_NIC_I82540EM_EERD]
  bt eax, DRIVER_NIC_I82540EM_EERD_done
- jnc .eerd1 ; not ready yet
+ jc .eerd1_ready ; yes
+ dec ecx
+ jnz .eerd1 ; not ready yet
+.eerd1_ready:
  shr eax, STATIC_MOVE_HIGH_TO_AX_shift
  mov word [rel driver_nic_i82540em_mac_address + SERVICE_NETWORK_STRUCTURE_MAC.2], ax
 
  ; read the contents of the register at address 0x02
  mov dword [rsi + DRIVER_NIC_I82540EM_EERD], 0x00000201
+ mov ecx, DRIVER_NIC_I82540EM_EERD_attempt_limit
 .eerd2:
  mov eax, dword [rsi + DRIVER_NIC_I82540EM_EERD]
  bt eax, DRIVER_NIC_I82540EM_EERD_done
- jnc .eerd2 ; not ready yet
+ jc .eerd2_ready ; yes
+ dec ecx
+ jnz .eerd2 ; not ready yet
+.eerd2_ready:
  shr eax, STATIC_MOVE_HIGH_TO_AX_shift
  mov word [rel driver_nic_i82540em_mac_address + SERVICE_NETWORK_STRUCTURE_MAC.4], ax
 
