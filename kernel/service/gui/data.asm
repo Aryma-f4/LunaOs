@@ -61,7 +61,7 @@ kernel_gui_window_taskbar dw 0 ; position on the X axis
  dw 0 ; position on the X axis relative to the window
  dw 0 ; position on the Y axis relative to the window
  dw LIBRARY_FONT_WIDTH_pixel * (.element_label_clock_end - .element_label_clock_string_hour) ; element width in pixels
- dw 18 ; element height in pixels
+ dw KERNEL_GUI_WINDOW_TASKBAR_HEIGHT_pixel ; element height in pixels
  dq STATIC_EMPTY ; pointer to the event handler procedure
  db LIBRARY_BOSU_ELEMENT_LABEL_FLAG_ALIGN_center
  db .element_label_clock_end - .element_label_clock_string ; string size in characters
