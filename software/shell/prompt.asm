@@ -108,11 +108,11 @@ shell_prompt_internal:
  jmp .end
 
 .no_cd:
- cmp rbx, shell_command_echo_end - shell_command_echo
+ cmp rbx, shell_command_cd_end - shell_command_cd
  jne .no_echo
 
  mov ecx, ebx
- mov rdi, shell_command_echo
+ mov rdi, shell_command_cd
  macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
  jc .no_echo
 
@@ -120,17 +120,35 @@ shell_prompt_internal:
  sub rcx, rbx
  add rsi, rbx
  macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
+ jc .cd_home
 
- ; splice a newline over the freed separator so the whole line leaves in one write
- mov byte [rsi - STATIC_BYTE_SIZE_byte], STATIC_SCANCODE_NEW_LINE
- dec rsi
- inc rcx
+ call shell_cwd_compute
 
- mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ax, KERNEL_SERVICE_PROCESS_dir_change
  int KERNEL_SERVICE
+ jc .cd_fail
 
+ mov rcx, qword [rel shell_cwd_tmp_length]
+ mov qword [rel shell_cwd_path_length], rcx
+ mov rsi, shell_cwd_tmp
+ mov rdi, shell_cwd_path
+ rep movsb
+
+ clc
  jmp .end
 
+.cd_home:
+ clc
+ jmp .end
+
+.cd_fail:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_cd_failed_end - shell_cd_failed
+ mov rsi, shell_cd_failed
+ int KERNEL_SERVICE
+ clc
+ jmp .end
+ 
 .no_echo:
  cmp rbx, shell_command_kill_end - shell_command_kill
  jne .no_kill

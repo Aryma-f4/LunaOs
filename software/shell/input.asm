@@ -4,21 +4,23 @@
 ;	rcx - size of the first "word" in bytes
 ;	rsi - pointer to the string
 shell_input:
- ; by default, the prompt character from the new line
- mov ecx, shell_string_prompt_end - shell_string_prompt_with_new_line
- mov rsi, shell_string_prompt_with_new_line
-
- ; is the cursor at the beginning of the row?
  cmp word [rdi + CONSOLE_STRUCTURE_STREAM_META.x], STATIC_EMPTY
- jne .prompt ; no
+ je .no_newline
 
- ; prompt character without a newline
- mov ecx, shell_string_prompt_end - shell_string_prompt
- mov rsi, shell_string_prompt
-
-.prompt:
- ; display the prompt character
  mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_string_prompt_newline_end - shell_string_prompt_newline
+ mov rsi, shell_string_prompt_newline
+ int KERNEL_SERVICE
+
+.no_newline:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_string_prompt_newline_end - shell_string_prompt_newline
+ mov rsi, shell_string_prompt_newline
+ int KERNEL_SERVICE
+
+.no_path:
+ mov ecx, shell_string_prompt_suffix_end - shell_string_prompt_suffix
+ mov rsi, shell_string_prompt_suffix
  int KERNEL_SERVICE
 
 .continue:

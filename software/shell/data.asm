@@ -11,11 +11,31 @@ shell_ipc_data:
 shell_string_cursor_reset db STATIC_SEQUENCE_CURSOR_ENABLE
 shell_string_cursor_reset_end:
 
-shell_string_prompt_with_new_line db STATIC_SCANCODE_NEW_LINE
-shell_string_prompt db STATIC_SEQUENCE_COLOR_RED_LIGHT
-shell_string_prompt_type db "# "
-shell_string_prompt_type_end db STATIC_SEQUENCE_COLOR_DEFAULT
-shell_string_prompt_end:
+shell_string_prompt_newline db STATIC_SCANCODE_NEW_LINE
+shell_string_prompt_newline_end:
+
+shell_string_prompt_prefix db STATIC_SEQUENCE_COLOR_BLUE_LIGHT
+shell_string_prompt_prefix_end:
+
+shell_string_prompt_suffix db STATIC_SEQUENCE_COLOR_RED_LIGHT, " # ", STATIC_SEQUENCE_COLOR_DEFAULT
+shell_string_prompt_suffix_end:
+
+shell_cd_failed db STATIC_SEQUENCE_COLOR_RED_LIGHT, "no such directory", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
+shell_cd_failed_end:
+
+SHELL_CWD_MAX equ 128
+align STATIC_QWORD_SIZE_byte, db STATIC_NOTHING
+shell_cwd_path:
+ times SHELL_CWD_MAX db STATIC_EMPTY
+shell_cwd_path_length:
+ dq STATIC_EMPTY
+
+align STATIC_QWORD_SIZE_byte, db STATIC_NOTHING
+shell_cwd_tmp:
+ times SHELL_CWD_MAX db STATIC_EMPTY
+shell_cwd_tmp_length:
+ dq STATIC_EMPTY
+
 shell_string_sequence_clear db STATIC_SEQUENCE_CLEAR
 shell_string_sequence_clear_end:
 shell_exec_path db "/bin/"

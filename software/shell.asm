@@ -22,6 +22,7 @@ shell:
  macro_debug "software: shell"
 
  %include "software/shell/data.asm"
+ %include "software/shell/cwd.asm"
  %include "software/shell/event.asm"
  %include "software/shell/header.asm"
  %include "software/shell/prompt.asm"
