@@ -42,6 +42,12 @@ shell_command_mkdir_end:
 shell_command_rm db "rm"
 shell_command_rm_end:
 
+shell_rm_usage db STATIC_SEQUENCE_COLOR_RED_LIGHT, "usage: rm <path>", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
+shell_rm_usage_end:
+
+shell_rm_denied db STATIC_SEQUENCE_COLOR_RED_LIGHT, "cannot remove file", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
+shell_rm_denied_end:
+
 shell_command_pidof db "pidof"
 shell_command_pidof_end:
 
@@ -59,6 +65,7 @@ shell_help_text db STATIC_SEQUENCE_COLOR_GRAY_LIGHT, STATIC_SCANCODE_NEW_LINE, "
  db "  kill <pid> terminate process by PID", STATIC_SCANCODE_NEW_LINE
  db "  pidof <name>   print the PID of matching processes", STATIC_SCANCODE_NEW_LINE
  db "  mkdir <path>   create a directory", STATIC_SCANCODE_NEW_LINE
+ db "  rm <path>      remove a file", STATIC_SCANCODE_NEW_LINE
  db "  help     this list", STATIC_SCANCODE_NEW_LINE
 shell_help_text_end:
 
@@ -68,12 +75,8 @@ shell_pidof_usage_end:
 
 shell_mkdir_usage db STATIC_SEQUENCE_COLOR_RED_LIGHT, "usage: mkdir <path>", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
 shell_mkdir_usage_end:
-shell_rm_usage db STATIC_SEQUENCE_COLOR_RED_LIGHT, "usage: rm <path>", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
-shell_rm_usage_end:
 shell_mkdir_denied db STATIC_SEQUENCE_COLOR_RED_LIGHT, "cannot create directory", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
 shell_mkdir_denied_end:
-shell_rm_denied db STATIC_SEQUENCE_COLOR_RED_LIGHT, "cannot remove file", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
-shell_rm_denied_end:
 
 shell_command_unknown db STATIC_SEQUENCE_COLOR_GREEN_LIGHT, "?", STATIC_SCANCODE_NEW_LINE
 shell_command_unknown_end:

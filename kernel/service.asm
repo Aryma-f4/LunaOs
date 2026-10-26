@@ -845,13 +845,6 @@ kernel_service:
  call kernel_vfs_path_resolve
  jc .vfs_remove_end
 
- push rdi
- 
- call kernel_vfs_file_find
-
- pop rsi
- jc .vfs_remove_end
-
  call kernel_vfs_file_remove
 
 .vfs_remove_end:

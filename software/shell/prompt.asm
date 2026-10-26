@@ -322,6 +322,44 @@ shell_prompt_internal:
  jmp .end
 
 .no_mkdir:
+ cmp rbx, shell_command_rm_end - shell_command_rm
+ jne .no_rm
+
+ mov ecx, ebx
+ mov rdi, shell_command_rm
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
+ jc .no_rm
+
+ mov rcx, qword [rsp]
+ sub rcx, rbx
+ add rsi, rbx
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
+ jc .rm_usage
+
+ mov ax, KERNEL_SERVICE_VFS_remove
+ int KERNEL_SERVICE
+ jc .rm_denied
+
+ clc
+ jmp .end
+
+.rm_usage:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_rm_usage_end - shell_rm_usage
+ mov rsi, shell_rm_usage
+ int KERNEL_SERVICE
+ clc
+ jmp .end
+
+.rm_denied:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_rm_denied_end - shell_rm_denied
+ mov rsi, shell_rm_denied
+ int KERNEL_SERVICE
+ clc
+ jmp .end
+
+.no_rm:
  stc
 
 .end:

@@ -974,59 +974,126 @@ kernel_vfs_file_read:
  macro_debug "kernel_vfs_file_read"
 
 kernel_vfs_file_remove:
- push rax
  push rbx
  push rdi
  push rsi
- 
+ push rcx
+
+ cmp rcx, 1
+ je .guard_dot
+ cmp rcx, 2
+ je .guard_dotdot
+ jmp .enter
+
+.guard_dot:
+ cmp byte [rsi], STATIC_SCANCODE_DOT
+ je .error
+ jmp .enter
+
+.guard_dotdot:
+ cmp word [rsi], 0x2E2E
+ je .error
+
+.enter:
+ mov rdi, qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.data]
+ test rdi, rdi
+ jz .error
+
+.block:
+ mov rbx, STATIC_STRUCTURE_BLOCK.link / KERNEL_VFS_STRUCTURE_KNOT.SIZE
+
+.loop:
+ test word [rdi + KERNEL_VFS_STRUCTURE_KNOT.flags], KERNEL_VFS_FILE_FLAGS_reserved
+ jz .next
+
+ cmp byte [rdi + KERNEL_VFS_STRUCTURE_KNOT.length], cl
+ jne .next
+
+ push rcx
+ push rsi
+ push rdi
+
+ add rdi, KERNEL_VFS_STRUCTURE_KNOT.name
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
+
+ pop rdi
+ pop rsi
+ pop rcx
+
+ jc .next
+
+ jmp .found
+
+.next:
+ add di, KERNEL_VFS_STRUCTURE_KNOT.SIZE
+ dec rbx
+ jnz .loop
+
+ and di, STATIC_PAGE_mask
+ mov rdi, qword [rdi + STATIC_STRUCTURE_BLOCK.link]
+ test rdi, rdi
+ jnz .block
+
+.error:
+ stc
+ jmp .end
+
+.found:
+ macro_lock kernel_vfs_semaphore, 0
+
  mov al, byte [rdi + KERNEL_VFS_STRUCTURE_KNOT.type]
  cmp al, KERNEL_VFS_FILE_TYPE_regular_file
  je .regular
  cmp al, KERNEL_VFS_FILE_TYPE_symbolic_link
  je .clear
 
+ mov byte [rel kernel_vfs_semaphore], STATIC_FALSE
  jmp .error
 
 .regular:
+ mov word [rdi + KERNEL_VFS_STRUCTURE_KNOT.flags], STATIC_EMPTY
+
+ push rdi
+
  mov rbx, qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.data]
- 
-.free_block:
+
+.free_loop:
  test rbx, rbx
- jz .clear
-
+ jz .free_done
  push qword [rbx + STATIC_STRUCTURE_BLOCK.link]
-
  mov rdi, rbx
  call kernel_memory_release_page
-
  pop rbx
- jmp .free_block
+
+ jmp .free_loop
+
+.free_done:
+ pop rdi
+ jmp .wipe
 
 .clear:
- mov rdi, qword [rsp + STATIC_QWORD_SIZE_byte]
- mov rsi, qword [rsp]
+ mov word [rdi + KERNEL_VFS_STRUCTURE_KNOT.flags], STATIC_EMPTY
 
- mov qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.data], STATIC_EMPTY
- mov qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.size], STATIC_EMPTY
- mov word  [rdi + KERNEL_VFS_STRUCTURE_KNOT.flags], STATIC_EMPTY
- mov word  [rdi + KERNEL_VFS_STRUCTURE_KNOT.mode], STATIC_EMPTY
- mov qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.time_modified], STATIC_EMPTY
- mov byte  [rdi + KERNEL_VFS_STRUCTURE_KNOT.type], STATIC_EMPTY
- mov byte  [rdi + KERNEL_VFS_STRUCTURE_KNOT.length], STATIC_EMPTY
+.wipe:
+  mov qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.data], STATIC_EMPTY
+  mov qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.size], STATIC_EMPTY
+  mov word  [rdi + KERNEL_VFS_STRUCTURE_KNOT.mode], STATIC_EMPTY
+  mov qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.time_modified], STATIC_EMPTY
+  mov byte  [rdi + KERNEL_VFS_STRUCTURE_KNOT.type], STATIC_EMPTY
+  mov byte  [rdi + KERNEL_VFS_STRUCTURE_KNOT.length], STATIC_EMPTY
 
- dec qword [rsi + KERNEL_VFS_STRUCTURE_KNOT.size]
+  mov rax, qword [rsp + STATIC_QWORD_SIZE_byte * 2]
+  dec qword [rax + KERNEL_VFS_STRUCTURE_KNOT.size]
 
- clc
- jmp .end
+  mov byte [rel kernel_vfs_semaphore], STATIC_FALSE
 
-.error:
- stc
+  clc
 
 .end:
+ pop rcx
  pop rsi
  pop rdi
  pop rbx
- pop rax
 
  ret
 
