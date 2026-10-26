@@ -42,7 +42,7 @@ shell_kill_usage_end:
 shell_kill_denied db STATIC_SEQUENCE_COLOR_RED_LIGHT, "cannot terminate this process", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
 shell_kill_denied_end:
 
-shell_help_text db STATIC_SEQUENCE_COLOR_GRAY_LIGHT, "internal commands:", STATIC_SCANCODE_NEW_LINE
+shell_help_text db STATIC_SEQUENCE_COLOR_GRAY_LIGHT, STATIC_SCANCODE_NEW_LINE, "internal commands:", STATIC_SCANCODE_NEW_LINE
  db STATIC_SEQUENCE_COLOR_DEFAULT
  db "  clear    clear the terminal", STATIC_SCANCODE_NEW_LINE
  db "  exit     leave the shell", STATIC_SCANCODE_NEW_LINE
