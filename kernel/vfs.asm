@@ -972,3 +972,62 @@ kernel_vfs_file_read:
 
  ; information for Bochs
  macro_debug "kernel_vfs_file_read"
+
+kernel_vfs_file_remove:
+ push rax
+ push rbx
+ push rdi
+ push rsi
+ 
+ mov al, byte [rdi + KERNEL_VFS_STRUCTURE_KNOT.type]
+ cmp al, KERNEL_VFS_FILE_TYPE_regular_file
+ je .regular
+ cmp al, KERNEL_VFS_FILE_TYPE_symbolic_link
+ je .clear
+
+ jmp .error
+
+.regular:
+ mov rbx, qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.data]
+ 
+.free_block:
+ test rbx, rbx
+ jz .clear
+
+ push qword [rbx + STATIC_STRUCTURE_BLOCK.link]
+
+ mov rdi, rbx
+ call kernel_memory_release_page
+
+ pop rbx
+ jmp .free_block
+
+.clear:
+ mov rdi, qword [rsp + STATIC_QWORD_SIZE_byte]
+ mov rsi, qword [rsp]
+
+ mov qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.data], STATIC_EMPTY
+ mov qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.size], STATIC_EMPTY
+ mov word  [rdi + KERNEL_VFS_STRUCTURE_KNOT.flags], STATIC_EMPTY
+ mov word  [rdi + KERNEL_VFS_STRUCTURE_KNOT.mode], STATIC_EMPTY
+ mov qword [rdi + KERNEL_VFS_STRUCTURE_KNOT.time_modified], STATIC_EMPTY
+ mov byte  [rdi + KERNEL_VFS_STRUCTURE_KNOT.type], STATIC_EMPTY
+ mov byte  [rdi + KERNEL_VFS_STRUCTURE_KNOT.length], STATIC_EMPTY
+
+ dec qword [rsi + KERNEL_VFS_STRUCTURE_KNOT.size]
+
+ clc
+ jmp .end
+
+.error:
+ stc
+
+.end:
+ pop rsi
+ pop rdi
+ pop rbx
+ pop rax
+
+ ret
+
+ macro_debug "kernel_vfs_file_remove"

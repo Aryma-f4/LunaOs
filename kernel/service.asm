@@ -798,6 +798,9 @@ kernel_service:
  cmp ax, KERNEL_SERVICE_VFS_write
  je .vfs_write ; yes
 
+ cmp ax, KERNEL_SERVICE_VFS_remove
+ je .vfs_remove
+
  ; no handling of the subprocedure
  jmp kernel_service.error
 
@@ -832,6 +835,34 @@ kernel_service:
 
  ; an empty file was created
  mov qword [rsp], STATIC_TRUE
+
+.vfs_remove:
+ push rax
+ push rcx
+ push rsi
+ push rdi
+
+ call kernel_vfs_path_resolve
+ jc .vfs_remove_end
+
+ push rdi
+ 
+ call kernel_vfs_file_find
+
+ pop rsi
+ jc .vfs_remove_end
+
+ call kernel_vfs_file_remove
+
+.vfs_remove_end:
+ pop rdi
+ pop rsi
+ pop rcx
+ pop rax
+
+ jmp kernel_service.end
+
+ macro_debug "kernel_service.vfs_remove"
 
 .vfs_write_ready:
  ; store the data into the file

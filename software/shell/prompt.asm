@@ -154,7 +154,6 @@ shell_prompt_internal:
  jmp .end
 
 .no_echo:
- ; check command: kill ?
  cmp rbx, shell_command_kill_end - shell_command_kill
  jne .no_kill
 
@@ -200,7 +199,6 @@ shell_prompt_internal:
  jmp .end
 
 .no_kill:
- ; check command: help ?
  cmp rbx, shell_command_help_end - shell_command_help
  jne .no_help
 
@@ -217,6 +215,87 @@ shell_prompt_internal:
  jmp .end
 
 .no_help:
+ cmp rbx, shell_command_pidof_end - shell_command_pidof
+ jne .no_pidof
+
+ mov ecx, ebx
+ mov rdi, shell_command_pidof
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
+ jc .no_pidof
+
+ mov r10, rsi
+ mov r11, rcx
+
+ mov ax, KERNEL_SERVICE_PROCESS_list
+ int KERNEL_SERVICE
+ jc .pidof_usage
+
+ push rsi
+ push rcx
+ mov r8, rsi
+ mov r9, rbx
+ xor r15, r15
+
+.pidof_loop:
+ test r9, r9
+ jz .pidof_done
+
+ movzx ecx, byte [r8 + KERNEL_TASK_STRUCTURE_ENTRY.length]
+ cmp rcx, r11
+ jne .pidof_next
+
+ mov rsi, r8
+ add rsi, KERNEL_TASK_STRUCTURE_ENTRY.name
+ mov rdi, r10
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
+ jc .pidof_next
+
+ mov rax, qword [r8 + KERNEL_TASK_STRUCTURE_ENTRY.pid]
+ mov rbx, STATIC_NUMBER_SYSTEM_decimal
+ xor ecx, ecx
+ mov dl, STATIC_SCANCODE_SPACE
+ mov rdi, shell_pidof_buffer
+ macro_library LIBRARY_STRUCTURE_ENTRY.integer_to_string
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov rsi, shell_pidof_buffer
+ int KERNEL_SERVICE
+
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out_char
+ mov ecx, 1
+ mov dl, STATIC_SCANCODE_SPACE
+ int KERNEL_SERVICE
+
+ inc r15
+
+.pidof_next:
+ movzx eax, byte [r8 + KERNEL_TASK_STRUCTURE_ENTRY.length]
+ lea r8, [r8 + KERNEL_TASK_STRUCTURE_ENTRY.name + rax]
+ dec r9
+ jmp .pidof_loop
+
+.pidof_done:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out_char
+ mov ecx, 1
+ mov dl, STATIC_SCANCODE_NEW_LINE
+ int KERNEL_SERVICE
+
+ pop rcx
+ pop rdi
+ mov ax, KERNEL_SERVICE_PROCESS_memory_release
+ int KERNEL_SERVICE
+
+ clc
+ jmp .end
+
+.pidof_usage:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_pidof_usage_end - shell_pidof_usage
+ mov rsi, shell_pidof_usage
+ int KERNEL_SERVICE
+ clc
+ jmp .end
+
+.no_pidof:
  stc
 
 .end:
