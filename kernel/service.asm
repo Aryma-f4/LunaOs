@@ -113,6 +113,10 @@ kernel_service:
  cmp ax, KERNEL_SERVICE_PROCESS_dir_change
  je .process_dir_change ; yes
 
+ ; terminate another process
+ cmp ax, KERNEL_SERVICE_PROCESS_kill
+ je .process_kill
+
  ; end of the subprocedure handling
  jmp kernel_service.error
 
@@ -674,6 +678,33 @@ kernel_service:
  jmp kernel_service.end
 
  macro_debug "kernel_service.process_sleep"
+
+.process_kill:
+ push rdi
+
+ call kernel_task_active_pid
+ cmp rax, rcx
+ je .process_kill_error
+
+ call kernel_task_pid_check
+ jc .process_kill_error
+
+ test word [rdi + KERNEL_TASK_STRUCTURE.flags], KERNEL_TASK_FLAG_service
+ jnz .process_kill_error
+
+ and word [rdi + KERNEL_TASK_STRUCTURE.flags], ~KERNEL_TASK_FLAG_active
+ or word [rdi + KERNEL_TASK_STRUCTURE.flags], KERNEL_TASK_FLAG_closed
+
+ pop rdi
+ clc
+ jmp kernel_service.end
+
+.process_kill_error:
+ pop rdi
+ stc
+ jmp kernel_service.end
+
+ macro_debug "kernel_service.process_kill"
 
 .process_release:
  ; preemption

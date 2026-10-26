@@ -464,6 +464,9 @@ kernel_task_pid_get:
  ; block the access to the subprocedure
  macro_lock kernel_task_pid_semaphore, 0
 
+ ; the lookup below uses RDI as its search pointer, keep the caller's
+ push rdi
+
 .next:
  ; fetch a unique PID number
  mov rcx, qword [rel kernel_task_pid]
@@ -475,6 +478,9 @@ kernel_task_pid_get:
 
  ; release the access to the subprocedure
  mov byte [rel kernel_task_pid_semaphore], STATIC_FALSE
+
+ ; restore the caller's search pointer
+ pop rdi
 
  ; return from the subprocedure
  ret
@@ -488,8 +494,6 @@ kernel_task_pid_get:
 kernel_task_pid_check:
  ; preserve the original registers
  push rax
- push rcx
- push rdi
 
  ; search the queue from the beginning
  mov rdi, qword [rel kernel_task_address]
@@ -538,8 +542,6 @@ kernel_task_pid_check:
 
 .end:
  ; restore the original registers
- pop rdi
- pop rcx
  pop rax
 
  ; return from the procedure

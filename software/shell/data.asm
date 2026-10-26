@@ -24,6 +24,10 @@ shell_exec_path_end:
 shell_cache:
  times SHELL_CACHE_SIZE_byte db STATIC_EMPTY
 
+shell_command_kill db "kill"
+shell_command_kill_end:
+shell_command_help db "help"
+shell_command_help_end:
 shell_command_clear db "clear"
 shell_command_clear_end:
 shell_command_exit db "exit"
@@ -32,6 +36,22 @@ shell_command_cd db "cd"
 shell_command_cd_end:
 shell_command_echo db "echo"
 shell_command_echo_end:
+
+shell_kill_usage db STATIC_SEQUENCE_COLOR_RED_LIGHT, "usage: kill <pid>", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
+shell_kill_usage_end:
+shell_kill_denied db STATIC_SEQUENCE_COLOR_RED_LIGHT, "cannot terminate this process", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE
+shell_kill_denied_end:
+
+shell_help_text db STATIC_SEQUENCE_COLOR_GRAY_LIGHT, "internal commands:", STATIC_SCANCODE_NEW_LINE
+ db STATIC_SEQUENCE_COLOR_DEFAULT
+ db "  clear    clear the terminal", STATIC_SCANCODE_NEW_LINE
+ db "  exit     leave the shell", STATIC_SCANCODE_NEW_LINE
+ db "  cd <dir> change working directory", STATIC_SCANCODE_NEW_LINE
+ db "  echo     print the arguments", STATIC_SCANCODE_NEW_LINE
+ db "  kill <pid> terminate process by PID", STATIC_SCANCODE_NEW_LINE
+ db "  help     this list", STATIC_SCANCODE_NEW_LINE
+shell_help_text_end:
+
 
 shell_command_unknown db STATIC_SEQUENCE_COLOR_GREEN_LIGHT, "?", STATIC_SCANCODE_NEW_LINE
 shell_command_unknown_end:

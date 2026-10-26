@@ -154,14 +154,74 @@ shell_prompt_internal:
  jmp .end
 
 .no_echo:
- ; unrecognized internal command
+ ; check command: kill ?
+ cmp rbx, shell_command_kill_end - shell_command_kill
+ jne .no_kill
+
+ mov ecx, ebx
+ mov rdi, shell_command_kill
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
+ jc .no_kill
+
+ mov rcx, qword [rsp]
+ sub rcx, rbx
+ add rsi, rbx
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
+ jc .kill_usage
+
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_digits
+ jc .kill_usage
+
+ mov rbx, rcx
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_to_integer
+
+ mov rcx, rax
+ mov ax, KERNEL_SERVICE_PROCESS_kill
+ int KERNEL_SERVICE
+ jc .kill_denied
+
+ clc
+ jmp .end
+
+.kill_usage:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_kill_usage_end - shell_kill_usage
+ mov rsi, shell_kill_usage
+ int KERNEL_SERVICE
+ clc
+ jmp .end
+
+.kill_denied:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_kill_denied_end - shell_kill_denied
+ mov rsi, shell_kill_denied
+ int KERNEL_SERVICE
+ clc
+ jmp .end
+
+.no_kill:
+ ; check command: help ?
+ cmp rbx, shell_command_help_end - shell_command_help
+ jne .no_help
+
+ mov ecx, ebx
+ mov rdi, shell_command_help
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
+ jc .no_help
+
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_help_text_end - shell_help_text
+ mov rsi, shell_help_text
+ int KERNEL_SERVICE
+ clc
+ jmp .end
+
+.no_help:
  stc
 
 .end:
- ; restore the original registers
  pop rcx
  pop rdi
  pop rax
 
- ; return from the procedure
  ret
