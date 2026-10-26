@@ -1,4 +1,3 @@
-
 ; entry:
 ;	rcx - size of the string
 ;	rsi - pointer to the current beginning of the data in the buffer
@@ -54,103 +53,82 @@ shell_prompt_clean:
 ; entry:
 ;	rbx - size of the command in characters
 ;	rsi - pointer to the command
+; exit:
+;	CF flag, if the string is not an internal command
 shell_prompt_internal:
  ; save the original registers
  push rax
  push rdi
  push rcx
 
- ; probably the command: clear
  cmp rbx, shell_command_clear_end - shell_command_clear
- jne .no_clear ; no
+ jne .no_clear
 
- ; check for the "clear" command
- mov ecx, ebx ; size of the compared string
+ mov ecx, ebx
  mov rdi, shell_command_clear
  macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
- jc .no_clear ; the strings differ
+ jc .no_clear
 
- ; send the character space clearing sequence
  mov ax, KERNEL_SERVICE_PROCESS_stream_out
  mov ecx, shell_string_sequence_clear_end - shell_string_sequence_clear
  mov rsi, shell_string_sequence_clear
  int KERNEL_SERVICE
 
- ; the command has been executed
  jmp .end
 
 .no_clear:
- ; probably the command: exit
  cmp rbx, shell_command_exit_end - shell_command_exit
- jne .no_exit ; no
+ jne .no_exit
 
- ; check for the "exit" command
- mov ecx, ebx ; size of the compared string
+ mov ecx, ebx
  mov rdi, shell_command_exit
  macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
- jc .no_exit ; the strings differ
+ jc .no_exit
 
- ; terminate the shell
  xor ax, ax
  int KERNEL_SERVICE
 
 .no_exit:
- ; probably the command: cd
  cmp rbx, shell_command_cd_end - shell_command_cd
- jne .no_cd ; no
+ jne .no_cd
 
- ; check for the "cd" command
- mov ecx, ebx ; size of the compared string
+ mov ecx, ebx
  mov rdi, shell_command_cd
  macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
- jc .no_cd ; the strings differ
+ jc .no_cd
 
- ; set the registers to the access path
  mov rcx, qword [rsp]
  sub rcx, rbx
  add rsi, rbx
-
- ; remove the "white characters" from the path, at the beginning and the end of the string
  macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
 
- ; change the working directory
  mov ax, KERNEL_SERVICE_PROCESS_dir_change
  int KERNEL_SERVICE
 
- ; the command has been executed
  jmp .end
 
 .no_cd:
- ; probably the command: echo
  cmp rbx, shell_command_echo_end - shell_command_echo
- jne .no_echo ; no
+ jne .no_echo
 
- ; check for the "echo" command
- mov ecx, ebx ; size of the compared string
+ mov ecx, ebx
  mov rdi, shell_command_echo
  macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
- jc .no_echo ; the strings differ
+ jc .no_echo
 
- ; set the registers to the argument list
  mov rcx, qword [rsp]
  sub rcx, rbx
  add rsi, rbx
-
- ; remove the "white characters" from the arguments, at the beginning and the end of the string
  macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
 
- ; the arguments are entitled to a new line, spliced over the separator so the
- ; whole line leaves in one write - the console publishes the cursor column
- ; between writes, and a stale column glues the prompt to the output
+ ; splice a newline over the freed separator so the whole line leaves in one write
  mov byte [rsi - STATIC_BYTE_SIZE_byte], STATIC_SCANCODE_NEW_LINE
  dec rsi
  inc rcx
 
- ; display the arguments
  mov ax, KERNEL_SERVICE_PROCESS_stream_out
  int KERNEL_SERVICE
 
- ; the command has been executed
  jmp .end
 
 .no_echo:
@@ -211,9 +189,11 @@ shell_prompt_internal:
  mov ecx, shell_help_text_end - shell_help_text
  mov rsi, shell_help_text
  int KERNEL_SERVICE
+
  clc
  jmp .end
 
+ ; ---------------- pidof <name> ----------------
 .no_help:
  cmp rbx, shell_command_pidof_end - shell_command_pidof
  jne .no_pidof
@@ -223,18 +203,24 @@ shell_prompt_internal:
  macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
  jc .no_pidof
 
- mov r10, rsi
- mov r11, rcx
+ ; extract the name argument BEFORE iterating (fixes the previous bug)
+ mov rcx, qword [rsp]
+ sub rcx, rbx
+ add rsi, rbx
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
+ jc .pidof_usage
+
+ mov r10, rsi   ; r10 = start of the searched name
+ mov r11, rcx   ; r11 = length of the searched name
 
  mov ax, KERNEL_SERVICE_PROCESS_list
  int KERNEL_SERVICE
  jc .pidof_usage
 
- push rsi
- push rcx
+ push rsi       ; save the buffer pointer
+ push rcx       ; save the buffer size
  mov r8, rsi
  mov r9, rbx
- xor r15, r15
 
 .pidof_loop:
  test r9, r9
@@ -265,8 +251,6 @@ shell_prompt_internal:
  mov dl, STATIC_SCANCODE_SPACE
  int KERNEL_SERVICE
 
- inc r15
-
 .pidof_next:
  movzx eax, byte [r8 + KERNEL_TASK_STRUCTURE_ENTRY.length]
  lea r8, [r8 + KERNEL_TASK_STRUCTURE_ENTRY.name + rax]
@@ -274,11 +258,13 @@ shell_prompt_internal:
  jmp .pidof_loop
 
 .pidof_done:
+ ; final newline
  mov ax, KERNEL_SERVICE_PROCESS_stream_out_char
  mov ecx, 1
  mov dl, STATIC_SCANCODE_NEW_LINE
  int KERNEL_SERVICE
 
+ ; free the process-list buffer (kernel returns size in RCX and address in RSI)
  pop rcx
  pop rdi
  mov ax, KERNEL_SERVICE_PROCESS_memory_release
@@ -296,11 +282,53 @@ shell_prompt_internal:
  jmp .end
 
 .no_pidof:
+ cmp rbx, shell_command_mkdir_end - shell_command_mkdir
+ jne .no_mkdir
+
+ mov ecx, ebx
+ mov rdi, shell_command_mkdir
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
+ jc .no_mkdir
+
+ mov rcx, qword [rsp]
+ sub rcx, rbx
+ add rsi, rbx
+ macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
+ jc .mkdir_usage
+
+ ; the kernel allocates the data page and fills in "." and ".."
+ mov dl, KERNEL_VFS_FILE_TYPE_directory
+ mov ax, KERNEL_SERVICE_VFS_touch
+ int KERNEL_SERVICE
+ jc .mkdir_denied
+
+ clc
+ jmp .end
+
+.mkdir_usage:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_mkdir_usage_end - shell_mkdir_usage
+ mov rsi, shell_mkdir_usage
+ int KERNEL_SERVICE
+ clc
+ jmp .end
+
+.mkdir_denied:
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_mkdir_denied_end - shell_mkdir_denied
+ mov rsi, shell_mkdir_denied
+ int KERNEL_SERVICE
+ clc
+ jmp .end
+
+.no_mkdir:
  stc
 
 .end:
+ ; restore the original registers
  pop rcx
  pop rdi
  pop rax
 
+ ; return from the procedure
  ret

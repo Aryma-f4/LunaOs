@@ -58,6 +58,7 @@ shell_help_text db STATIC_SEQUENCE_COLOR_GRAY_LIGHT, STATIC_SCANCODE_NEW_LINE, "
  db "  echo     print the arguments", STATIC_SCANCODE_NEW_LINE
  db "  kill <pid> terminate process by PID", STATIC_SCANCODE_NEW_LINE
  db "  pidof <name>   print the PID of matching processes", STATIC_SCANCODE_NEW_LINE
+ db "  mkdir <path>   create a directory", STATIC_SCANCODE_NEW_LINE
  db "  help     this list", STATIC_SCANCODE_NEW_LINE
 shell_help_text_end:
 
