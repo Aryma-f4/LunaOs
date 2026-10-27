@@ -18,7 +18,20 @@ shell_input:
  mov rsi, shell_string_prompt_newline
  int KERNEL_SERVICE
 
-.no_path:
+ ; print prompt prefix color
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_string_prompt_prefix_end - shell_string_prompt_prefix
+ mov rsi, shell_string_prompt_prefix
+ int KERNEL_SERVICE
+
+ ; print current working directory
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov rcx, qword [rel shell_cwd_path_length]
+ mov rsi, shell_cwd_path
+ int KERNEL_SERVICE
+
+ ; print prompt suffix
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
  mov ecx, shell_string_prompt_suffix_end - shell_string_prompt_suffix
  mov rsi, shell_string_prompt_suffix
  int KERNEL_SERVICE
