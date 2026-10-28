@@ -14,10 +14,18 @@ shell_string_cursor_reset_end:
 shell_string_prompt_newline db STATIC_SCANCODE_NEW_LINE
 shell_string_prompt_newline_end:
 
+shell_string_prompt_user db STATIC_SEQUENCE_COLOR_GREEN_LIGHT, "root", STATIC_SEQUENCE_COLOR_DEFAULT
+shell_string_prompt_user_end:
+shell_string_prompt_at db "@"
+shell_string_prompt_at_end:
+shell_string_prompt_host db STATIC_SEQUENCE_COLOR_GREEN_LIGHT, "lunaos", STATIC_SEQUENCE_COLOR_DEFAULT
+shell_string_prompt_host_end:
+shell_string_prompt_colon db ":"
+shell_string_prompt_colon_end:
 shell_string_prompt_prefix db STATIC_SEQUENCE_COLOR_BLUE_LIGHT
 shell_string_prompt_prefix_end:
 
-shell_string_prompt_suffix db STATIC_SEQUENCE_COLOR_RED_LIGHT, " # ", STATIC_SEQUENCE_COLOR_DEFAULT
+shell_string_prompt_suffix db STATIC_SEQUENCE_COLOR_DEFAULT, "$ ", STATIC_SEQUENCE_COLOR_DEFAULT
 shell_string_prompt_suffix_end:
 
 shell_cd_failed db STATIC_SEQUENCE_COLOR_RED_LIGHT, "no such directory", STATIC_SEQUENCE_COLOR_DEFAULT, STATIC_SCANCODE_NEW_LINE

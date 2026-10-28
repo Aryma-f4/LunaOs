@@ -43,11 +43,23 @@ shell_cwd_compute:
  cmp byte [rdi - STATIC_BYTE_SIZE_byte], STATIC_SCANCODE_SLASH
  je .rel_copy_arg
 
+ ; no room for the separator
+ cmp rbx, SHELL_CWD_MAX
+ jae .rel_copy_arg
+
  mov byte [rdi], STATIC_SCANCODE_SLASH
  inc rdi
  inc rbx
 
 .rel_copy_arg:
+ ; never write past shell_cwd_tmp
+ mov rax, SHELL_CWD_MAX
+ sub rax, rbx
+ cmp r8, rax
+ jbe .rel_copy_arg_room
+ mov r8, rax
+
+.rel_copy_arg_room:
  mov rcx, r8
  mov rsi, r9
  rep movsb
@@ -91,28 +103,21 @@ shell_cwd_compute:
  jmp .done
 
 .parent:
- mov rcx, qword [rel shell_cwd_path_length]
- test rcx, rcx
- jz .parent_root
- cmp rcx, 1
- je .parent_root
-
-  mov rsi, shell_cwd_path
- add rsi, rcx
- dec rsi
+ ; rbx tracks the offset of the last separator, so it never needs the
+ ; full address of shell_cwd_path (an immediate would lose the base)
+ mov rbx, qword [rel shell_cwd_path_length]
+ cmp rbx, 1
+ jbe .parent_root
 
 .parent_walk:
+ dec rbx
+ jz .parent_root ; the leading separator is the parent
+ mov rsi, shell_cwd_path
+ add rsi, rbx
  cmp byte [rsi], STATIC_SCANCODE_SLASH
- je .parent_found
- dec rsi
- jmp .parent_walk
+ jne .parent_walk
 
-.parent_found:
- mov rcx, rsi
- sub rcx, shell_cwd_path
- test rcx, rcx
- jz .parent_root
- mov rbx, rcx
+ mov rcx, rbx
  mov rsi, shell_cwd_path
  rep movsb
  jmp .done

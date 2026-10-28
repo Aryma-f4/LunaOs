@@ -12,19 +12,43 @@ shell_input:
  mov rsi, shell_string_prompt_newline
  int KERNEL_SERVICE
 
-.no_newline:
+ .no_newline:
  mov ax, KERNEL_SERVICE_PROCESS_stream_out
  mov ecx, shell_string_prompt_newline_end - shell_string_prompt_newline
  mov rsi, shell_string_prompt_newline
  int KERNEL_SERVICE
 
- ; print prompt prefix color
+ ; print user
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_string_prompt_user_end - shell_string_prompt_user
+ mov rsi, shell_string_prompt_user
+ int KERNEL_SERVICE
+
+ ; print @
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_string_prompt_at_end - shell_string_prompt_at
+ mov rsi, shell_string_prompt_at
+ int KERNEL_SERVICE
+
+ ; print host
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_string_prompt_host_end - shell_string_prompt_host
+ mov rsi, shell_string_prompt_host
+ int KERNEL_SERVICE
+
+ ; print :
+ mov ax, KERNEL_SERVICE_PROCESS_stream_out
+ mov ecx, shell_string_prompt_colon_end - shell_string_prompt_colon
+ mov rsi, shell_string_prompt_colon
+ int KERNEL_SERVICE
+
+ ; print cwd color
  mov ax, KERNEL_SERVICE_PROCESS_stream_out
  mov ecx, shell_string_prompt_prefix_end - shell_string_prompt_prefix
  mov rsi, shell_string_prompt_prefix
  int KERNEL_SERVICE
 
- ; print current working directory
+ ; print cwd
  mov ax, KERNEL_SERVICE_PROCESS_stream_out
  mov rcx, qword [rel shell_cwd_path_length]
  mov rsi, shell_cwd_path

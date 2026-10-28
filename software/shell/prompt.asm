@@ -89,24 +89,6 @@ shell_prompt_internal:
  int KERNEL_SERVICE
 
 .no_exit:
- cmp rbx, shell_command_cd_end - shell_command_cd
- jne .no_cd
-
- mov ecx, ebx
- mov rdi, shell_command_cd
- macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
- jc .no_cd
-
- mov rcx, qword [rsp]
- sub rcx, rbx
- add rsi, rbx
- macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
-
- mov ax, KERNEL_SERVICE_PROCESS_dir_change
- int KERNEL_SERVICE
-
- jmp .end
-
 .no_cd:
  cmp rbx, shell_command_cd_end - shell_command_cd
  jne .no_echo
@@ -116,18 +98,23 @@ shell_prompt_internal:
  macro_library LIBRARY_STRUCTURE_ENTRY.string_compare
  jc .no_echo
 
+ ; argument list after the command
  mov rcx, qword [rsp]
  sub rcx, rbx
  add rsi, rbx
  macro_library LIBRARY_STRUCTURE_ENTRY.string_trim
- jc .cd_home
+ jc .cd_root
 
+ ; build the new absolute path, let the kernel resolve it
  call shell_cwd_compute
 
+ mov rcx, qword [rel shell_cwd_tmp_length]
+ mov rsi, shell_cwd_tmp
  mov ax, KERNEL_SERVICE_PROCESS_dir_change
  int KERNEL_SERVICE
  jc .cd_fail
 
+ ; only publish the path once the kernel accepted it
  mov rcx, qword [rel shell_cwd_tmp_length]
  mov qword [rel shell_cwd_path_length], rcx
  mov rsi, shell_cwd_tmp
@@ -137,7 +124,18 @@ shell_prompt_internal:
  clc
  jmp .end
 
-.cd_home:
+.cd_root:
+ ; bare "cd" goes to the root directory
+ mov byte [rel shell_cwd_tmp], STATIC_SCANCODE_SLASH
+ mov rcx, 0x01
+ mov rsi, shell_cwd_tmp
+ mov ax, KERNEL_SERVICE_PROCESS_dir_change
+ int KERNEL_SERVICE
+ jc .cd_fail
+
+ mov byte [rel shell_cwd_path], STATIC_SCANCODE_SLASH
+ mov qword [rel shell_cwd_path_length], 0x01
+
  clc
  jmp .end
 
@@ -148,7 +146,7 @@ shell_prompt_internal:
  int KERNEL_SERVICE
  clc
  jmp .end
- 
+
 .no_echo:
  cmp rbx, shell_command_kill_end - shell_command_kill
  jne .no_kill
