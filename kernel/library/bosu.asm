@@ -1086,9 +1086,6 @@ library_bosu_char:
  ; change the color
  stosd
 
- ; draw the shadow behind the pixel
- mov dword [rdi], STATIC_EMPTY
-
  ; continue
  jmp .continue
 
