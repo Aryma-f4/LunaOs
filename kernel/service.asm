@@ -309,6 +309,11 @@ kernel_service:
  test rcx, rcx
  jz .process_stream_out_end ; yes
 
+ ; validate that the string buffer is in userspace
+ mov rbx, SOFTWARE_BASE_address
+ cmp rsi, rbx
+ jb .process_stream_out_error
+
  ; fetch the identifier of the output stream of the process
  call kernel_task_active
  mov rbx, qword [rdi + KERNEL_TASK_STRUCTURE.out]
@@ -324,6 +329,14 @@ kernel_service:
  ; end of the option handling
  jmp kernel_service.end
 
+.process_stream_out_error:
+ ; restore the original registers
+ pop rdi
+ pop rbx
+
+ ; flag, error
+ jmp kernel_service.error
+
  macro_debug "kernel_service.process_stream_out"
 
 ; input:
@@ -335,6 +348,11 @@ kernel_service:
  ; preserve the original registers
  push rbx
  push rdi
+
+ ; validate that the destination buffer is in userspace
+ mov rbx, SOFTWARE_BASE_address
+ cmp rdi, rbx
+ jb .process_stream_in_error
 
  ; fetch the identifier of the input stream of the process
  call kernel_task_active
@@ -352,6 +370,14 @@ kernel_service:
 
  ; end of the option handling
  jmp kernel_service.end
+
+.process_stream_in_error:
+ ; restore the original registers
+ pop rdi
+ pop rbx
+
+ ; flag, error
+ jmp kernel_service.error
 
  macro_debug "kernel_service.process_stream_in"
 
